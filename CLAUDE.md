@@ -1,4 +1,4 @@
-# Photo Planet — ghi chú cho Claude
+# Đảo ký ức (Memory Isles) — ghi chú cho Claude
 
 ## Git
 - Sửa xong thì commit rồi push thẳng vào `main` (`git push origin HEAD:main`), không cần tạo PR hay chờ duyệt.

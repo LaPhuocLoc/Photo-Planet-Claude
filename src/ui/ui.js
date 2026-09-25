@@ -60,7 +60,7 @@ export class UI {
     $('trip-name').textContent = t.title;
     $('trip-jp').textContent = t.titleJp ?? '';
     $('j-title').textContent = [t.title, t.titleJp].filter(Boolean).join(' · ');
-    document.title = `Photo Planet · ${t.title}`;
+    document.title = `Đảo ký ức · ${t.title}`;
   }
 
   // gọi khi dữ liệu đầy đủ của đảo đã tải xong

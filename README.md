@@ -1,4 +1,6 @@
-# Photo Planet 🌏📷
+# Đảo ký ức · 思い出の島 · Memory Isles 🏝️📷
+
+Những hòn đảo nhỏ mang ký ức về các chuyến đi Nhật Bản.
 
 Mỗi chuyến đi là một hành tinh nhỏ. Đi bộ quanh hành tinh, tới từng nơi đã ghé để xem ảnh chụp ở đó.
 Hành tinh đầu tiên là **đảo Sado (佐渡島)**, chụp ngày 19–20.09.2026.

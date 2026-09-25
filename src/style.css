@@ -175,6 +175,14 @@ button {
   letter-spacing: 0.32em;
   color: var(--teal-d);
 }
+.brand small {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-jp);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-soft);
+}
 .intro-title {
   margin: 6px 0 2px;
   font-weight: 900;

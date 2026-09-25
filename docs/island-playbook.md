@@ -1,4 +1,4 @@
-# Sổ tay làm đảo — Photo Planet
+# Sổ tay làm đảo — Đảo ký ức
 
 Kinh nghiệm đúc kết từ lúc dựng đảo **Sado** (hành tinh đầu tiên). Agent `island-creator` và
 `island-editor` **phải đọc hết file này trước khi làm**. Có bài học mới thì bổ sung vào đây.

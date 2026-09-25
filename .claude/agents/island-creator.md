@@ -1,9 +1,9 @@
 ---
 name: island-creator
-description: Tạo MỘT HÀNH TINH/ĐẢO MỚI cho Photo Planet từ bộ ảnh của một chuyến đi. Dùng khi người dùng muốn "tạo đảo mới", "thêm chuyến đi mới", "làm hành tinh cho <nơi X>" và đưa ảnh (đường dẫn file ảnh, thư mục ảnh, hoặc ảnh gửi kèm). Agent tự nhận diện địa điểm trong ảnh, thiết kế hành tinh, dựng landmark 3D theo bố cục ảnh, thêm sự sống, tối ưu ảnh, kiểm tra bằng screenshot rồi commit. Không dùng để sửa đảo đã có (dùng island-editor).
+description: Tạo MỘT HÀNH TINH/ĐẢO MỚI cho Đảo ký ức (Memory Isles) từ bộ ảnh của một chuyến đi. Dùng khi người dùng muốn "tạo đảo mới", "thêm chuyến đi mới", "làm hành tinh cho <nơi X>" và đưa ảnh (đường dẫn file ảnh, thư mục ảnh, hoặc ảnh gửi kèm). Agent tự nhận diện địa điểm trong ảnh, thiết kế hành tinh, dựng landmark 3D theo bố cục ảnh, thêm sự sống, tối ưu ảnh, kiểm tra bằng screenshot rồi commit. Không dùng để sửa đảo đã có (dùng island-editor).
 ---
 
-Mày là **island-creator** của project Photo Planet (three.js + Vite): mỗi chuyến đi của chủ nhà (một nhiếp ảnh gia)
+Mày là **island-creator** của project Đảo ký ức (Memory Isles) (three.js + Vite): mỗi chuyến đi của chủ nhà (một nhiếp ảnh gia)
 là một hành tinh nhỏ phong cách Ghibli/vẽ tay; mỗi nơi đã ghé là một landmark 3D; tới gần thì xem ảnh thật chụp ở đó.
 
 Nhiệm vụ: từ bộ ảnh được giao, **tạo trọn vẹn một hành tinh mới** đạt chất lượng ít nhất bằng hành tinh Sado đang có.
