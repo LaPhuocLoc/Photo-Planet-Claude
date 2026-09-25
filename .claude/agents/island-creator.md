@@ -10,16 +10,19 @@ Nhiệm vụ: từ bộ ảnh được giao, **tạo trọn vẹn một hành ti
 
 ## Luôn làm trước tiên
 1. Đọc **`docs/island-playbook.md`** từ đầu đến cuối. Đó là kinh nghiệm, yêu cầu và các lỗi đã gặp; làm đúng theo nó.
-2. Đọc `src/data/trips.js`, `src/world/landmarks.js` (BUILDERS, VIEWS, LEDGES), `src/world/life.js`, `src/world/world.js`
+2. Đọc `src/trips/index.js`, `src/trips/sado/index.js` (đảo mẫu), `src/world/landmarks.js` (BUILDERS, VIEWS, LEDGES), `src/world/life.js`, `src/world/world.js`
    để nắm các "khối lego" có sẵn và dùng lại chúng trước khi viết mới.
-3. Kiểm tra nợ kỹ thuật ở §8 của playbook (chọn chuyến đi qua `?trip=`, ảnh theo thư mục chuyến, life.js khoá theo kiểu
-   landmark). Mục nào chưa xong thì **làm trước**, không được làm hỏng Sado. Chụp lại Sado sau khi sửa để đối chiếu.
+3. Đọc §8 (kiến trúc nhiều đảo + nợ còn lại) và §8b (hiệu năng) của playbook. Nợ nào đụng tới đảo mới thì **xử lý trước**,
+   không được làm hỏng Sado. Chụp lại Sado sau khi sửa để đối chiếu.
 
 ## Quy trình
 1. **Ảnh**: xem từng ảnh (Read), đọc EXIF, sắp theo thời gian chụp. Nhận diện địa điểm và ghi độ chắc chắn cho từng ảnh.
    Gom thành 4–8 địa điểm. Copy ảnh gốc vào `images/<trip-id>/`, rồi chạy `npm run photos`.
-2. **Dữ liệu chuyến đi**: thêm 1 phần tử vào `TRIPS` gồm id (kebab-case, không dấu), title, titleJp/tên bản địa (nếu có),
-   region, dates (lấy từ EXIF), intro, planet (seed mới, seas, hills bám theo địa lý thật), spawn, places, route.
+2. **Dữ liệu chuyến đi**: tạo `src/trips/<id>/index.js` (id kebab-case, không dấu; copy cấu trúc từ Sado) gồm title,
+   titleJp/tên bản địa (nếu có), region, dates (lấy từ EXIF), intro, planet (seed mới, seas, hills bám theo địa lý thật),
+   spawn, places, route, `photoMeta` (import `./photo-meta.json`). Đăng ký 1 mục nhẹ trong `TRIP_LIST` (`src/trips/index.js`)
+   kèm `cover` (thumbnail ảnh đẹp nhất). Landmark riêng của đảo → `builders/views/ledges` trong gói đảo, không nhét vào
+   `landmarks.js` (giữ gói chính nhẹ). Ảnh: `npm run photos -- <id>`.
    Caption và blurb là bản nháp khách quan, không bịa kỷ niệm.
 3. **Landmark**: với mỗi địa điểm, xác định "bố cục chữ ký" của ảnh chính rồi dựng lại cho đúng.
    - Nếu có kiểu sẵn phù hợp thì dùng lại, chỉnh bằng dữ liệu. Nếu không thì viết builder mới trong `landmarks.js`, kèm VIEWS
@@ -44,7 +47,7 @@ Nhiệm vụ: từ bộ ảnh được giao, **tạo trọn vẹn một hành ti
 
 ## Kết quả trả về (tiếng Việt, gọn)
 - Danh sách địa điểm: tên, ảnh nào, độ chắc chắn nhận diện, giả định đã dùng.
-- Những gì đã dựng (landmark, sự sống, đặc sản màu), link mở: `?trip=<id>` và `?trip=<id>#<placeId>`.
+- Những gì đã dựng (landmark, sự sống, đặc sản màu), link mở: `?trip=<id>` và `?trip=<id>#<placeId>`. Thời gian dựng (`world.timings`).
 - Đường dẫn các ảnh chụp màn hình kiểm tra chính.
 - Số liệu hiệu năng, kết quả build, commit hash, branch đã push.
 - Việc còn dở hoặc chỗ cần người dùng xác nhận (caption, tên địa điểm không chắc…).

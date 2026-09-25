@@ -44,16 +44,20 @@ export class World {
     this.playerPos = new THREE.Vector3();
     // đường làng đi vào điểm đứng xem (phía trước landmark), không xuyên qua landmark
     for (const p of this.places) {
-      const at = (VIEWS[p.landmark] ?? VIEWS.default).at;
+      const at = this.viewOf(p).at;
       p.approach = p.dir.clone().multiplyScalar(this.R).addScaledVector(p.frame.side, at[0]).addScaledVector(p.frame.fwd, at[1] - 0.6).normalize();
     }
     // mỏm đá landmark cần → đưa vào địa hình trước khi dựng mesh
     for (const p of this.places) {
-      for (const [x, z, r, h] of LEDGES[p.landmark] ?? []) {
+      for (const [x, z, r, h] of this.trip.ledges?.[p.landmark] ?? LEDGES[p.landmark] ?? []) {
         const d = p.dir.clone().multiplyScalar(this.R).addScaledVector(p.frame.side, x).addScaledVector(p.frame.fwd, z).normalize();
         this.terrain.ledges.push({ dir: d, r: r / this.R, h });
       }
     }
+  }
+
+  viewOf(p) {
+    return this.trip.views?.[p.landmark] ?? VIEWS[p.landmark] ?? VIEWS.default;
   }
 
   // độ cao mặt cầu tại d (hoặc null nếu không đứng trên cầu)
@@ -94,21 +98,46 @@ export class World {
     this.animators.push(fn);
   }
 
-  build() {
-    this.terrainMesh = this.terrain.buildMesh(110, this.uniforms);
-    this.group.add(this.terrainMesh);
-    this.water = createWater(this.R, this.uniforms);
-    this.group.add(this.water);
-    this.buildRoad();
-    for (const p of this.places) buildLandmark(this, p);
-    this.scatter();
-    this.buildClouds();
-    this.buildGulls();
-    this.buildFerry();
-    this.dust = createDust(this.R);
-    this.group.add(this.dust);
-    this.life = buildLife(this);
+  // Dựng theo từng bước, nhường luồng chính giữa các bước để loader không đơ và báo tiến độ.
+  // quality 'low' (điện thoại): lưới địa hình thưa hơn, ít cỏ/hoa hơn — bố cục cây/nhà giữ nguyên.
+  async build({ quality = 'high', onProgress = () => {} } = {}) {
+    this.quality = quality;
+    // nhường luồng bằng setTimeout (không chờ rAF: máy yếu mỗi khung hình compositor rất đắt)
+    const yieldFrame = () => new Promise((r) => setTimeout(r, 0));
+    const steps = [
+      ['Đang nặn địa hình', () => {
+        this.terrainMesh = this.terrain.buildMesh(quality === 'low' ? 84 : 110, this.uniforms);
+        this.group.add(this.terrainMesh);
+        this.water = createWater(this.R, this.uniforms);
+        this.group.add(this.water);
+      }],
+      ['Đang trải đường làng', () => this.buildRoad()],
+      ['Đang dựng các địa điểm', () => { for (const p of this.places) buildLandmark(this, p); }],
+      ['Đang trồng cây', () => this.scatter()],
+      ['Đang gọi mây và chim', () => {
+        this.buildClouds();
+        this.buildGulls();
+        this.buildFerry();
+        this.dust = createDust(this.R);
+        this.group.add(this.dust);
+      }],
+      ['Đang mời dân làng', () => { this.life = buildLife(this); }],
+    ];
+    this.timings = {};
+    for (let i = 0; i < steps.length; i++) {
+      onProgress(steps[i][0], i / steps.length);
+      await yieldFrame();
+      const t = performance.now();
+      steps[i][1]();
+      this.timings[steps[i][0]] = Math.round(performance.now() - t);
+    }
+    onProgress('Xong', 1);
     return this;
+  }
+
+  // Giảm mật độ đồ lặt vặt (cỏ, hoa) cho máy yếu, giữ nguyên thứ tự ngẫu nhiên.
+  thin(list) {
+    return this.quality === 'low' ? list.filter((_, i) => i % 5 < 3) : list;
   }
 
   surfacePoint(dir, lift = 0, out = new THREE.Vector3()) {
@@ -378,7 +407,7 @@ export class World {
 
     // cỏ + lúa lay theo gió
     const grassMat = windMaterial(0xffffff, this.uniforms, { strength: 0.1, vertexColors: true });
-    this.instances(Models.grass(), sets.grass, { outline: 0, mat: grassMat, cast: false });
+    this.instances(Models.grass(), this.thin(sets.grass), { outline: 0, mat: grassMat, cast: false });
     const riceSet = [];
     for (const p of this.places.filter((q) => q.landmark === 'rice')) {
       const R0 = p.flat.r;

@@ -25,11 +25,14 @@ Kinh nghiệm đúc kết từ lúc dựng đảo **Sado** (hành tinh đầu ti
 ## 1. Bản đồ code
 
 ```
-src/data/trips.js          TRIPS[]: mỗi chuyến đi = { id, title, titleJp, region, dates, intro,
-                           planet{radius, seed, seas[], hills[]}, spawn, places[], route[] }
-src/data/photo-meta.json   EXIF sinh tự động (npm run photos) — KHÔNG sửa tay
-images/                    ảnh gốc (JPG). id ảnh = tên file bỏ đuôi
-public/photos/             webp sinh tự động: <id>.webp (2000px), <id>-1200.webp, <id>-thumb.webp
+src/trips/index.js         TRIP_LIST: danh sách đảo SIÊU NHẸ (id, title, dates, cover, load: () => import('./<id>/index.js'))
+                           — thứ duy nhất về các đảo nằm trong gói JS chính. Mở đảo bằng ?trip=<id>
+src/trips/<id>/index.js    dữ liệu đầy đủ 1 đảo (chunk riêng, chỉ tải khi mở): { id, title, titleJp, region, dates,
+                           intro, planet{radius, seed, seas[], hills[]}, spawn, places[], route[], photoMeta,
+                           tuỳ chọn: builders{kiểu: fn}, views{kiểu: {...}}, ledges{kiểu: [...]}, photoDir }
+src/trips/<id>/photo-meta.json  EXIF sinh tự động (npm run photos) — KHÔNG sửa tay
+images/<id>/               ảnh gốc (JPG) của đảo. id ảnh = tên file bỏ đuôi (chỉ cần duy nhất trong 1 đảo)
+public/photos/<id>/        webp sinh tự động: <ảnh>.webp (2000px), <ảnh>-1200.webp, <ảnh>-thumb.webp
 scripts/build-photos.mjs   tối ưu ảnh + đọc EXIF (sharp + exifr)
 scripts/verify/tour.mjs    chụp màn hình kiểm tra (xem §7)
 src/main.js                renderer, input (chuột/cảm ứng/phím), vòng lặp, travel, debug window.__planet
@@ -115,7 +118,8 @@ src/ui/ui.js + style.css   HUD, album (EXIF, srcset, preload), nhật ký, pin, 
 | Bug | Nguyên nhân gốc | Cách tránh |
 |---|---|---|
 | Ảnh album mờ dù đã tải xong | thumbnail có `filter` + `transform` → stacking context, vẽ **đè** lên ảnh nét dù DOM đứng trước | ảnh nét `position:relative; z-index:1`; ẩn thumbnail khi ảnh nét hiện xong. Kiểm bằng `elementFromPoint` + crop ảnh, không chỉ đọc class |
-| Mobile chạm đi lại mở album | picker sphere tàng hình to (2–4.5) | trên cảm ứng: chạm = luôn đi; xem ảnh bằng nút dock dưới màn hình |
+| Mobile chạm đi lại mở album | picker sphere tàng hình to (2–4.5) | cảm ứng: KHÔNG click-to-move/picker; di chuyển bằng joystick nổi (đặt ngón bất kỳ đâu), ngón 2 xoay, chụm zoom; xem ảnh bằng nút dock dưới màn hình |
+| Load chậm ~10s trên máy yếu | chờ rAF giữa các bước dựng + lớp phủ `mix-blend-mode`/`backdrop-filter` | xem §8b |
 | Shader không compile | đặt tên biến `patch` (từ khoá GLSL) | tránh từ khoá: patch, sample, input, output, filter, active… Luôn đọc console sau khi sửa shader |
 | Mặt nhân vật lỗ chỗ khi zoom gần | occlusion dither ăn cả nhân vật | vật liệu nhân vật không `withOcclusion` |
 | Cây che camera, landmark bị cây bao | rải cây quá sát | pad quanh landmark + occlusion |
@@ -136,23 +140,59 @@ src/ui/ui.js + style.css   HUD, album (EXIF, srcset, preload), nhật ký, pin, 
 - Console không có lỗi shader/pageerror. `npx vite build` phải qua.
 - Test logic bằng node khi được: import `src/world/world.js` với `globalThis.document` giả để đo độ cao/walkable.
 
-## 8. Nợ kỹ thuật khi có đảo thứ 2 (island-creator xử lý ở lần đầu)
+## 8. Kiến trúc nhiều đảo (đã có) + nợ còn lại
 
-1. **Chọn chuyến đi**: `main.js` đang cứng `TRIPS[0]`. Cần: `?trip=<id>` trên URL (mặc định chuyến mới nhất
-   hoặc Sado), và 1 UI chọn hành tinh (ví dụ nút "Thiên hà" trong HUD → danh sách hành tinh). Link chia sẻ dạng
-   `?trip=<id>#<placeId>`. Key localStorage đã theo trip id.
-2. **Ảnh theo thư mục chuyến**: tên file máy ảnh (DSC0xxxx) sẽ trùng giữa các chuyến. Chuyến mới để ở
-   `images/<trip-id>/`, id ảnh = `<trip-id>/<tên>` (hoặc tiền tố), `build-photos.mjs` phải quét thư mục con và giữ
-   nguyên output của Sado (không đổi id ảnh Sado đang dùng).
-3. **life.js khoá theo KIỂU landmark** (`byLm.rice`…): 2 đảo cùng dùng kiểu `rice` sẽ lẫn. Chuyển cấu hình người/mèo/
-   thuyền/đèn đá sang dữ liệu từng địa điểm trong `trips.js` (ví dụ `place.life = { people:[…], cats:[…], boats:[…] }`)
-   hoặc khoá theo place id; giữ nguyên kết quả của Sado.
-4. `LEDGES`, `VIEWS`, `TARAI_BRIDGE` cũng theo kiểu landmark → landmark mới đặt tên kiểu riêng, hoặc cho phép
-   override trong dữ liệu địa điểm.
-5. Tránh đổi code chung theo hướng làm Sado xấu đi: sau khi sửa phải chụp lại Sado để so.
+Đã làm (đừng phá):
+- Mỗi đảo là 1 chunk riêng (`src/trips/<id>/`), gói chính chỉ chứa engine + `TRIP_LIST`.
+  → 50 đảo thì lần tải đầu vẫn nặng như 1 đảo. Ảnh chỉ tải khi tới gần địa điểm/mở album.
+- `?trip=<id>` chọn đảo. Chuyển đảo = tải lại trang (bộ nhớ GPU/JS đảo cũ giải phóng sạch, không lo rò rỉ).
+  Nhật ký có mục "Hành tinh khác" tự hiện khi TRIP_LIST > 1.
+- Ảnh theo thư mục đảo: `images/<id>/` → `npm run photos [-- <id>]` (bỏ qua ảnh đã xử lý).
+- Landmark riêng của đảo đặt trong gói đảo: `builders/views/ledges` trong `src/trips/<id>/index.js`,
+  dùng các helper chung (import từ `src/world/*`). Chỉ đưa vào `landmarks.js` khi nhiều đảo dùng chung.
+
+Còn nợ (island-creator xử lý khi gặp):
+1. **life.js khoá theo KIỂU landmark** (`byLm.rice`…): 2 đảo cùng kiểu sẽ dùng chung bảng người/mèo/thuyền của Sado.
+   Chuyển sang dữ liệu từng địa điểm (`place.life = { people:[…], cats:[…], boats:[…] }`) hoặc khoá theo place id;
+   giữ nguyên kết quả của Sado.
+2. Sau khi sửa code chung phải chụp lại Sado để so.
+
+## 8b. Hiệu năng & tải trang (đã đo, giữ vững)
+
+- Gói chính ~178KB gzip (three.js chiếm phần lớn), gói đảo ~2KB gzip, font chỉ 3 độ đậm Latin + 1 độ đậm tiếng Nhật.
+- Dựng hành tinh theo từng bước có % tiến độ (`World.build({ quality, onProgress })`), nhường luồng bằng `setTimeout`
+  (KHÔNG chờ rAF). Điện thoại/máy ≤4 nhân dùng `quality:'low'` (lưới 84, ít cỏ/hoa hơn, bố cục giữ nguyên).
+- Lưới cầu: `geodesicSphere(n)` tự viết (nhanh ~15× so với IcosahedronGeometry + mergeVertices). Không quay lại cách cũ.
+- Hàm độ cao: loại nhanh đặc điểm xa bằng `near()` trước khi `acos`. Viền mực: `addOutlineNormals` dùng khoá số.
+- CSS: KHÔNG dùng `mix-blend-mode` hay `backdrop-filter` trên lớp phủ toàn màn hình / trên nền canvas động
+  (đo được: làm chậm tải ~2.5× trên máy yếu). Khi album/nhật ký che màn hình → dừng vẽ 3D.
+- Service worker (`public/sw.js`, chỉ bản build): asset hash cache-first; HTML trả cache ngay + cập nhật ngầm;
+  ảnh + font stale-while-revalidate, giới hạn 240 ảnh. Lần đầu trang gửi danh sách file đã tải để SW cất ngay.
+  Đổi chiến lược cache → tăng `V` trong sw.js.
+- Ngân sách mỗi đảo: ≤ ~700 draw call, ≤ ~1M tam giác (góc chơi thường); dựng ≤ ~1.5s trên PC
+  (xem `world.timings` sau khi build).
 
 ## 9. Git
 
 - Làm trên branch được giao; commit message tiếng Việt, mô tả rõ; push branch.
 - **Chỉ đẩy vào `main` khi người dùng yêu cầu rõ** (fast-forward nếu được, không force).
-- Ảnh gốc mới cũng commit vào `images/` (người dùng muốn giữ trong repo), webp sinh ra commit vào `public/photos/`.
+- Ảnh gốc mới cũng commit vào `images/<id>/` (người dùng muốn giữ trong repo), webp sinh ra commit vào `public/photos/<id>/`.
+
+## 10. Kế hoạch scale 10 → 50 đảo (đã phân tích)
+
+Nguyên tắc: **chi phí lúc chạy chỉ phụ thuộc 1 đảo đang mở**, không phụ thuộc tổng số đảo.
+
+| Tài nguyên | Theo số đảo? | Vì sao |
+|---|---|---|
+| Gói JS chính | Không (+~300 byte/đảo trong `TRIP_LIST`) | dữ liệu + landmark riêng ở chunk của đảo |
+| Tải lần đầu | Không | chỉ tải gói đảo đang mở (~2–10KB gzip) + ảnh khi tới gần |
+| RAM / GPU | Không | 1 đảo trong bộ nhớ; đổi đảo = tải lại trang |
+| Dung lượng deploy | Có (ảnh ~0.5MB × số ảnh) | 50 đảo × 10 ảnh ≈ 250MB → vẫn ổn với Pages/Netlify/Cloudflare; >1GB thì chuyển ảnh sang CDN/R2 (chỉ đổi `photoDir`) |
+| Repo git | Có (ảnh gốc) | ảnh gốc 2–3MB/tấm; >500MB nên chuyển `images/` sang Git LFS hoặc giữ ngoài repo |
+
+Việc cần làm khi tới ngưỡng:
+- **>10 đảo**: màn "Thiên hà" (lưới hành tinh thu nhỏ từ `cover`) thay cho danh sách trong nhật ký.
+- **Landmark dùng chung nhiều**: tách `landmarks.js` thành module theo kiểu (`src/world/landmarks/<kiểu>.js`) và import động
+  từ gói đảo, để gói chính không phình.
+- **Nếu engine phình >250KB gzip**: tách `life.js`/`landmarks.js` thành chunk import động (engine lõi tải trước, trang intro hiện ngay).
+- **Ảnh**: có thể thêm AVIF (nhẹ hơn webp ~30%) vào `srcset` khi cần.

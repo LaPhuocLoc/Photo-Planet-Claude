@@ -482,7 +482,7 @@ export function buildLife(world) {
     if (sets.white.length + sets.yellow.length > 1600) break;
   }
   const flowerMat = windMaterial(0xffffff, world.uniforms, { strength: 0.14, vertexColors: true });
-  for (const k of Object.keys(sets)) world.instances(flowerGeo(k), sets[k], { outline: 0, mat: flowerMat, cast: false });
+  for (const k of Object.keys(sets)) world.instances(flowerGeo(k), world.thin(sets[k]), { outline: 0, mat: flowerMat, cast: false });
 
   // ── xe buýt chạy vòng + người đạp xe + người đi bộ trên đường ──
   if (road.length > 10) {

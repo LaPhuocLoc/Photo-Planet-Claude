@@ -137,24 +137,32 @@ export function outlineMaterial(thickness = 0.035, color = INK, { occlude = true
 export function addOutlineNormals(geo) {
   const pos = geo.attributes.position;
   const nor = geo.attributes.normal;
+  const n = pos.count;
+  // khoá số (không dùng chuỗi): toạ độ làm tròn 1/500 → gộp 3 số nguyên vào 1 double (không trùng)
   const map = new Map();
-  const keys = new Array(pos.count);
-  for (let i = 0; i < pos.count; i++) {
-    const k = `${Math.round(pos.getX(i) * 500)},${Math.round(pos.getY(i) * 500)},${Math.round(pos.getZ(i) * 500)}`;
-    keys[i] = k;
+  const slot = new Int32Array(n);
+  const acc = [];
+  const K = 262144;
+  for (let i = 0; i < n; i++) {
+    const k = Math.round(pos.getX(i) * 500) + 131072 + K * (Math.round(pos.getY(i) * 500) + 131072 + K * (Math.round(pos.getZ(i) * 500) + 131072));
     let a = map.get(k);
-    if (!a) map.set(k, (a = [0, 0, 0]));
-    a[0] += nor.getX(i);
-    a[1] += nor.getY(i);
-    a[2] += nor.getZ(i);
+    if (a === undefined) {
+      a = acc.length;
+      acc.push(0, 0, 0);
+      map.set(k, a);
+    }
+    slot[i] = a;
+    acc[a] += nor.getX(i);
+    acc[a + 1] += nor.getY(i);
+    acc[a + 2] += nor.getZ(i);
   }
-  const out = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const a = map.get(keys[i]);
-    const l = Math.hypot(a[0], a[1], a[2]) || 1;
-    out[i * 3] = a[0] / l;
-    out[i * 3 + 1] = a[1] / l;
-    out[i * 3 + 2] = a[2] / l;
+  const out = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const a = slot[i];
+    const l = Math.hypot(acc[a], acc[a + 1], acc[a + 2]) || 1;
+    out[i * 3] = acc[a] / l;
+    out[i * 3 + 1] = acc[a + 1] / l;
+    out[i * 3 + 2] = acc[a + 2] / l;
   }
   geo.setAttribute('outlineNormal', new THREE.BufferAttribute(out, 3));
   return geo;

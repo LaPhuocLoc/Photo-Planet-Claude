@@ -1,10 +1,13 @@
 // Giao diện DOM: intro, HUD, album ảnh, nhật ký, pin bản đồ, toast.
-import META from '../data/photo-meta.json';
+import { TRIP_LIST, tripUrl } from '../trips/index.js';
 
 const $ = (id) => document.getElementById(id);
-const photoUrl = (id) => `photos/${id}.webp`;
-const midUrl = (id) => `photos/${id}-1200.webp`;
-const thumbUrl = (id) => `photos/${id}-thumb.webp`;
+// thư mục ảnh + EXIF của đảo đang mở (gán trong UI.setTrip)
+let DIR = 'photos';
+let META = {};
+const photoUrl = (id) => `${DIR}/${id}.webp`;
+const midUrl = (id) => `${DIR}/${id}-1200.webp`;
+const thumbUrl = (id) => `${DIR}/${id}-thumb.webp`;
 const SRCSET = (id) => `${midUrl(id)} 1200w, ${photoUrl(id)} 2000w`;
 const SIZES = '(max-width: 860px) 100vw, 75vw';
 
@@ -35,28 +38,48 @@ const fmtDate = (iso) =>
     : null;
 
 export class UI {
-  constructor(trip, handlers) {
-    this.trip = trip;
+  // entry: mục nhẹ trong TRIP_LIST (hiện intro ngay khi gói JS chính vừa tải xong,
+  // trong lúc dữ liệu chi tiết của đảo còn đang tải/dựng)
+  constructor(entry, handlers) {
+    this.trip = entry;
     this.h = handlers;
-    this.places = trip.places;
-    this.discovered = new Set(this.load());
+    this.places = [];
+    this.discovered = new Set();
     this.gallery = { open: false, place: null, index: 0 };
     this.pinEls = new Map();
     this.currentTitle = null;
-
-    $('intro-name').textContent = trip.title;
-    $('intro-jp').textContent = trip.titleJp;
-    $('intro-meta').textContent = `${trip.region} · ${trip.dates}`;
-    $('intro-text').textContent = trip.intro;
-    $('trip-name').textContent = trip.title;
-    $('trip-jp').textContent = trip.titleJp;
-    $('j-title').textContent = `${trip.title} · ${trip.titleJp}`;
+    this.fillTripText(entry);
     document.body.classList.add('intro-on');
+    this.bind();
+  }
 
+  fillTripText(t) {
+    $('intro-name').textContent = t.title;
+    $('intro-jp').textContent = t.titleJp ?? '';
+    $('intro-meta').textContent = [t.region, t.dates].filter(Boolean).join(' · ');
+    $('intro-text').textContent = t.intro ?? '';
+    $('trip-name').textContent = t.title;
+    $('trip-jp').textContent = t.titleJp ?? '';
+    $('j-title').textContent = [t.title, t.titleJp].filter(Boolean).join(' · ');
+    document.title = `Photo Planet · ${t.title}`;
+  }
+
+  // gọi khi dữ liệu đầy đủ của đảo đã tải xong
+  setTrip(trip) {
+    this.trip = trip;
+    this.places = trip.places;
+    DIR = trip.photoDir;
+    META = trip.photoMeta ?? {};
+    this.discovered = new Set(this.load());
+    this.fillTripText(trip);
     this.buildPins();
     this.buildJournal();
     this.updateProgress();
-    this.bind();
+  }
+
+  setLoading(text) {
+    const b = $('start');
+    if (b.disabled) b.querySelector('.label').textContent = text;
   }
 
   // ── lưu trạng thái đã khám phá (per-browser) ──────────────
@@ -138,6 +161,11 @@ export class UI {
     el.classList.remove('fade');
     clearTimeout(this.hintT);
     this.hintT = setTimeout(() => el.classList.add('fade'), ms);
+  }
+
+  hideHint() {
+    clearTimeout(this.hintT);
+    $('hint').classList.add('fade');
   }
 
   toast(text, ms = 2600) {
@@ -233,11 +261,28 @@ export class UI {
       list.appendChild(li);
     });
   }
+  // các hành tinh khác (chuyển đảo = tải lại trang → bộ nhớ đảo cũ giải phóng sạch)
+  buildPlanets() {
+    const wrap = $('j-planets');
+    const others = TRIP_LIST.filter((t) => t.id !== this.trip.id);
+    wrap.hidden = others.length === 0;
+    wrap.querySelector('.j-plist').innerHTML = others
+      .map(
+        (t) => `<a class="j-planet" href="${tripUrl(t.id)}">
+          ${t.cover ? `<img src="${t.cover}" alt="" loading="lazy" />` : ''}
+          <span><b>${t.title}</b><small>${[t.titleJp, t.dates].filter(Boolean).join(' · ')}</small></span></a>`,
+      )
+      .join('');
+  }
+
   toggleJournal(force) {
     const el = $('journal');
     const open = force ?? el.hidden;
     el.hidden = !open;
-    if (open) this.buildJournal();
+    if (open) {
+      this.buildJournal();
+      this.buildPlanets();
+    }
   }
   get journalOpen() {
     return !$('journal').hidden;

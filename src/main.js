@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import './style.css';
-import { TRIPS } from './data/trips.js';
+import { TRIP_LIST, currentTripId, loadTrip } from './trips/index.js';
 import { World } from './world/world.js';
 import { createSky } from './world/sky.js';
-import { VIEWS } from './world/landmarks.js';
 import { occlusion } from './world/toon.js';
 import { Player } from './player/player.js';
 import { CameraRig } from './core/rig.js';
 import { Ambience } from './core/audio.js';
 import { UI } from './ui/ui.js';
 
-const trip = TRIPS[0];
+const tripEntry = TRIP_LIST.find((t) => t.id === currentTripId());
+let trip = tripEntry;
 const canvas = document.getElementById('scene');
 const isTouch = matchMedia('(hover: none)').matches;
 
@@ -41,7 +41,7 @@ scene.add(sun, sun.target);
 const sky = createSky(uniforms);
 scene.add(sky);
 
-const ui = new UI(trip, {
+const ui = new UI(tripEntry, {
   onStart: start,
   onToggleMap: () => setMap(rig.mode !== 'planet'),
   onToggleMusic: () => {
@@ -67,17 +67,23 @@ let rig;
 let started = false;
 const pickers = [];
 
-// ── Dựng hành tinh (sau 1 frame để loader kịp hiện) ──────────
-requestAnimationFrame(() =>
-  setTimeout(() => {
-    world = new World(trip, uniforms).build();
+// ── Tải gói dữ liệu của đảo (chunk riêng) rồi dựng hành tinh theo từng bước ──
+(async () => {
+  try {
+    ui.setLoading('Đang tải dữ liệu đảo…');
+    trip = await loadTrip(tripEntry.id);
+    ui.setTrip(trip);
+    world = await new World(trip, uniforms).build({
+      quality: isTouch || navigator.hardwareConcurrency <= 4 ? 'low' : 'high',
+      onProgress: (label, f) => ui.setLoading(`${label}… ${Math.round(f * 100)}%`),
+    });
     scene.add(world.group);
     player = new Player(world);
     scene.add(player.object);
     rig = new CameraRig(camera, player, world.R);
 
     for (const p of world.places) {
-      const v = VIEWS[p.landmark] ?? VIEWS.default;
+      const v = world.viewOf(p);
       p.view = v;
       p.focus = world.surfacePoint(dirAtLocal(p, v.focus[0], v.focus[1]), 2.2);
       // vùng click landmark (chỉ dùng với chuột; trên cảm ứng chạm = luôn là đi)
@@ -100,8 +106,11 @@ requestAnimationFrame(() =>
     rig.orbitDistTarget = 72;
     ui.ready();
     if (hashId === spawn.id) pendingOpen = spawn.id;
-  }, 30),
-);
+  } catch (err) {
+    console.error(err);
+    ui.setLoading('Không tải được hành tinh — thử tải lại trang');
+  }
+})();
 let pendingOpen = null;
 
 function dirAtLocal(p, x, z) {
@@ -109,7 +118,7 @@ function dirAtLocal(p, x, z) {
 }
 
 function placeAtView(p) {
-  const v = p.view ?? VIEWS[p.landmark] ?? VIEWS.default;
+  const v = p.view ?? world.viewOf(p);
   const at = dirAtLocal(p, v.at[0], v.at[1]);
   const look = dirAtLocal(p, v.focus[0], v.focus[1]);
   const facing = look.clone().sub(at);
@@ -129,11 +138,17 @@ function start() {
   ui.setMapActive(false);
   ui.showHint(
     isTouch
-      ? 'Chạm để đi · Giữ ngón tay để đi theo · Kéo để xoay · Chụm để thu phóng · Tới gần địa điểm để xem ảnh'
+      ? 'Đặt ngón tay bất kỳ đâu rồi kéo để đi · Ngón thứ 2 kéo để xoay · Chụm 2 ngón để thu phóng'
       : 'WASD / click để đi · Kéo chuột để xoay · Cuộn để thu phóng · Shift chạy · M bản đồ · E xem ảnh',
     11000,
   );
   if (pendingOpen) setTimeout(() => ui.openGallery(pendingOpen), 2600);
+  // lần đầu trên cảm ứng: hiện joystick mẫu nhấp nháy để người chơi biết cách đi
+  if (isTouch && !joy.used) {
+    joyEl.style.transform = `translate(${innerWidth * 0.5}px, ${innerHeight * 0.66}px)`;
+    joyEl.classList.add('ghost');
+    setTimeout(() => joyEl.classList.remove('ghost'), 7000);
+  }
 }
 
 function setMap(on) {
@@ -203,30 +218,78 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => keys.clear());
 
+// ── Con trỏ ─────────────────────────────────────────────────
+// Chuột: click để đi, kéo để xoay, cuộn để zoom.
+// Cảm ứng (chế độ đi dạo): đặt ngón tay BẤT KỲ ĐÂU → hiện joystick nổi, kéo để đi theo hướng đó
+//   (kéo ra mép vòng = chạy). Ngón thứ 2 kéo để xoay camera. Đặt 2 ngón cùng lúc → xoay + chụm để zoom.
+// Cảm ứng (chế độ hành tinh): 1 ngón kéo xoay hành tinh, chạm để bay tới, chụm để zoom.
 const pointers = new Map();
 let dragMoved = 0;
-let pinchDist = 0;
-// giữ ngón tay trên mặt đất ~0.25s → nhân vật đi theo ngón tay
-const hold = { active: false, timer: 0, x: 0, y: 0, last: 0 };
 const tapSlop = (e) => (e.pointerType === 'mouse' ? 6 : 12);
+const JOY_R = 56;
+const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0, t0: 0, used: false };
+const joyEl = document.getElementById('joystick');
+const knobEl = joyEl.querySelector('.knob');
+let gesture = null;
+const joyAllowed = () => started && rig?.mode === 'explore' && rig.blend < 0.5 && !ui.gallery.open;
+
+function joyShow(x, y) {
+  joy.ox = x;
+  joy.oy = y;
+  joy.x = joy.y = 0;
+  joy.t0 = performance.now();
+  joyEl.style.transform = `translate(${x}px, ${y}px)`;
+  knobEl.style.transform = 'translate(0px, 0px)';
+  joyEl.classList.remove('ghost');
+  joyEl.classList.add('on');
+  if (!joy.used) {
+    joy.used = true;
+    ui.hideHint?.();
+  }
+}
+function joyHide() {
+  joy.id = null;
+  joy.x = joy.y = 0;
+  joyEl.classList.remove('on');
+}
+function joyMoveTo(px, py) {
+  let dx = px - joy.ox;
+  let dy = py - joy.oy;
+  const l = Math.hypot(dx, dy);
+  // kéo quá xa → vòng tròn trượt theo ngón tay (không bao giờ "hết đường")
+  if (l > JOY_R * 1.5) {
+    const k = (l - JOY_R * 1.5) / l;
+    joy.ox += dx * k;
+    joy.oy += dy * k;
+    joyEl.style.transform = `translate(${joy.ox}px, ${joy.oy}px)`;
+    dx = px - joy.ox;
+    dy = py - joy.oy;
+  }
+  const L = Math.hypot(dx, dy);
+  const c = L > JOY_R ? JOY_R / L : 1;
+  knobEl.style.transform = `translate(${dx * c}px, ${dy * c}px)`;
+  joy.x = (dx * c) / JOY_R;
+  joy.y = (dy * c) / JOY_R;
+}
+const gestureOf = () => {
+  const [a, b] = [...pointers.values()];
+  return { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, dist: Math.hypot(a.x - b.x, a.y - b.y) };
+};
+
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
   dragMoved = 0;
-  clearTimeout(hold.timer);
-  hold.active = false;
-  if (pointers.size === 1 && e.pointerType !== 'mouse') {
-    hold.x = e.clientX;
-    hold.y = e.clientY;
-    hold.timer = setTimeout(() => {
-      if (pointers.size === 1 && dragMoved <= tapSlop(e) && rig?.mode === 'explore') hold.active = true;
-    }, 260);
+  if (e.pointerType === 'mouse') return;
+  if (pointers.size === 1 && joyAllowed()) {
+    joy.id = e.pointerId;
+    joyShow(e.clientX, e.clientY);
+    return;
   }
-  if (pointers.size === 2) {
-    clearTimeout(hold.timer);
-    hold.active = false;
-    const [a, b] = [...pointers.values()];
-    pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+  if (pointers.size >= 2) {
+    // 2 ngón gần như cùng lúc (joystick chưa kịp dùng) → cử chỉ xoay/zoom
+    if (joy.id !== null && Math.hypot(joy.x, joy.y) < 0.2 && performance.now() - joy.t0 < 350) joyHide();
+    if (joy.id === null) gesture = gestureOf();
   }
 });
 canvas.addEventListener('pointermove', (e) => {
@@ -236,22 +299,20 @@ canvas.addEventListener('pointermove', (e) => {
   const dy = e.clientY - p.y;
   p.x = e.clientX;
   p.y = e.clientY;
-  if (pointers.size === 2) {
-    const [a, b] = [...pointers.values()];
-    const d = Math.hypot(a.x - b.x, a.y - b.y);
-    handleZoom((pinchDist - d) * 4);
-    pinchDist = d;
-    dragMoved = 99;
-    return;
-  }
-  if (hold.active) {
-    hold.x = e.clientX;
-    hold.y = e.clientY;
-    return;
+  if (e.pointerType !== 'mouse') {
+    if (e.pointerId === joy.id) return joyMoveTo(e.clientX, e.clientY);
+    if (joy.id !== null) return rig.drag(dx * 1.3, dy * 1.1); // ngón thứ 2 khi đang đi: xoay camera
+    if (pointers.size >= 2 && gesture) {
+      const g = gestureOf();
+      rig.drag((g.cx - gesture.cx) * 1.2, (g.cy - gesture.cy) * 1.0);
+      handleZoom((gesture.dist - g.dist) * 4);
+      gesture = g;
+      dragMoved = 99;
+      return;
+    }
   }
   dragMoved += Math.abs(dx) + Math.abs(dy);
   if (dragMoved > tapSlop(e)) {
-    clearTimeout(hold.timer);
     canvas.classList.add('dragging');
     rig.drag(dx, dy);
   }
@@ -260,12 +321,12 @@ const endPointer = (e) => {
   const had = pointers.get(e.pointerId);
   pointers.delete(e.pointerId);
   canvas.classList.remove('dragging');
-  clearTimeout(hold.timer);
-  if (hold.active) {
-    hold.active = false;
-    return;
-  }
-  if (had && pointers.size === 0 && dragMoved <= tapSlop(e) && e.type === 'pointerup') handleClick(e.clientX, e.clientY, e.pointerType);
+  if (pointers.size < 2) gesture = null;
+  if (e.pointerId === joy.id) return joyHide();
+  // chạm/click nhanh: chuột → đi tới / mở landmark; cảm ứng → chỉ dùng ở chế độ hành tinh (bay tới)
+  const tap = had && pointers.size === 0 && dragMoved <= tapSlop(e) && e.type === 'pointerup';
+  if (!tap) return;
+  if (e.pointerType === 'mouse' || rig?.mode === 'planet') handleClick(e.clientX, e.clientY, e.pointerType);
 };
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
@@ -347,6 +408,17 @@ const _v = new THREE.Vector3();
 const _move = new THREE.Vector3();
 const _right = new THREE.Vector3();
 
+// joystick → vector di chuyển (theo hướng camera). Vùng chết nhỏ ở tâm, đẩy ra mép = chạy.
+function joyMove() {
+  if (joy.id === null) return null;
+  const m = Math.hypot(joy.x, joy.y);
+  if (m < 0.12) return null;
+  const k = Math.min(1, (m - 0.12) / 0.8) / m;
+  const fwd = rig.forward();
+  _right.crossVectors(fwd, player.dir).normalize();
+  return _move.copy(fwd).multiplyScalar(-joy.y * k).addScaledVector(_right, joy.x * k);
+}
+
 function keyMove() {
   let f = 0;
   let s = 0;
@@ -370,6 +442,7 @@ function project(p, out = {}) {
   return out;
 }
 
+let frozen = false;
 function tick() {
   requestAnimationFrame(tick);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -378,9 +451,12 @@ function tick() {
   if (!world) return;
 
   const canMove = started && rig.blend < 0.3 && !ui.gallery.open;
-  const mv = canMove ? keyMove() : null;
+  const jm = canMove ? joyMove() : null;
+  const mv = jm ?? (canMove ? keyMove() : null);
   if (!canMove && player.target && rig.mode === 'planet') player.target = null;
-  player.update(canMove ? dt : 0, mv, keys.has('shift'), t);
+  player.update(canMove ? dt : 0, mv, keys.has('shift') || (jm && Math.hypot(joy.x, joy.y) > 0.93), t);
+  // camera lười biếng xoay theo khi lái sang ngang bằng joystick (như game mobile)
+  if (jm && player.speed > 0.3 && joy.y < 0.45) rig.heading.lerp(player.facing, Math.min(1, dt * 1.3 * Math.abs(joy.x)));
   const b = rig.update(dt, player.speed > 0.2);
   world.playerPos.copy(player.position);
   world.update(t, dt);
@@ -430,12 +506,6 @@ function tick() {
     }
   } else ui.setPrompt(null);
 
-  // giữ ngón tay → đi theo ngón tay
-  if (hold.active && t - hold.last > 0.12) {
-    hold.last = t;
-    const h = groundHit(hold.x, hold.y);
-    if (h) player.walkTo(h.point.clone().normalize(), { stopDist: 0.5 });
-  }
 
   // pin toàn cảnh
   if (started) {
@@ -457,7 +527,10 @@ function tick() {
     if (k > 0.8 || !player.target) marker.visible = k < 0.8 && !!player.target;
   }
 
-  renderer.render(scene, camera);
+  // album/nhật ký đang mở che gần hết màn hình → dừng vẽ 3D (nhẹ máy, đỡ pin; nền blur tĩnh)
+  const covered = ui.gallery.open || (ui.journalOpen && innerWidth < 700);
+  if (!covered || !frozen) renderer.render(scene, camera);
+  frozen = covered;
 }
 tick();
 
@@ -484,3 +557,20 @@ window.__planet = {
     rig.blend = 0;
   },
 };
+
+// cache offline cho lần mở sau (chỉ bản build; dev server thì không để khỏi dính cache cũ)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('sw.js');
+      const reg = await navigator.serviceWorker.ready;
+      // cất ngay những gì lần đầu đã tải (HTML, JS, CSS, font, ảnh) → lần sau mở tức thì / offline
+      const urls = [location.origin + location.pathname, ...performance.getEntriesByType('resource').map((r) => r.name)].filter(
+        (u) => u.startsWith(location.origin) || /fonts\.(googleapis|gstatic)\.com/.test(u),
+      );
+      reg.active?.postMessage({ type: 'precache', urls });
+    } catch {
+      /* không có SW cũng không sao */
+    }
+  });
+}

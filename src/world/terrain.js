@@ -1,7 +1,6 @@
 // Địa hình hành tinh: hàm độ cao giải tích + mesh có màu theo đỉnh.
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
-import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toonGradient } from './toon.js';
 
 export const DEG = Math.PI / 180;
@@ -29,6 +28,14 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 const angleBetween = (a, b) => Math.acos(Math.min(1, Math.max(-1, a.dot(b))));
+// Loại nhanh đặc điểm ở xa (so dot với cos ngưỡng, cache theo từng đặc điểm) — tránh acos thừa
+const near = (d, f, maxA) => {
+  if (f._maxA !== maxA) {
+    f._maxA = maxA;
+    f._cos = Math.cos(Math.min(Math.PI, maxA));
+  }
+  return d.dot(f.dir) > f._cos;
+};
 
 // Khung toạ độ tiếp tuyến tại 1 điểm trên cầu.
 export function tangentFrame(up, bearingDeg = 0) {
@@ -61,6 +68,89 @@ const PAL = {
   basalt: C(0x4a4642),
   basaltHi: C(0x625b53),
 };
+
+// Lưới cầu geodesic có đỉnh dùng chung ngay từ đầu (nhanh hơn ~15 lần so với
+// IcosahedronGeometry(1, n) + mergeVertices vốn sinh đỉnh trùng rồi mới gộp).
+const ICO_T = (1 + Math.sqrt(5)) / 2;
+const ICO_V = [-1, ICO_T, 0, 1, ICO_T, 0, -1, -ICO_T, 0, 1, -ICO_T, 0, 0, -1, ICO_T, 0, 1, ICO_T, 0, -1, -ICO_T, 0, 1, -ICO_T, ICO_T, 0, -1, ICO_T, 0, 1, -ICO_T, 0, -1, -ICO_T, 0, 1];
+const ICO_F = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8, 3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1];
+export function geodesicSphere(n) {
+  n = Math.max(1, Math.round(n) + 1); // cùng mật độ với IcosahedronGeometry(1, detail)
+  const maxV = 10 * n * n + 2;
+  const pos = new Float32Array(maxV * 3);
+  const index = new Uint32Array(20 * n * n * 3);
+  let vc = 0;
+  let ic = 0;
+  const shared = new Map();
+  const add = (x, y, z) => {
+    const l = Math.hypot(x, y, z);
+    pos[vc * 3] = x / l;
+    pos[vc * 3 + 1] = y / l;
+    pos[vc * 3 + 2] = z / l;
+    return vc++;
+  };
+  const grid = new Int32Array((n + 1) * (n + 1));
+  for (let f = 0; f < 20; f++) {
+    const A = ICO_F[f * 3];
+    const B = ICO_F[f * 3 + 1];
+    const C = ICO_F[f * 3 + 2];
+    const ax = ICO_V[A * 3], ay = ICO_V[A * 3 + 1], az = ICO_V[A * 3 + 2];
+    const bx = ICO_V[B * 3], by = ICO_V[B * 3 + 1], bz = ICO_V[B * 3 + 2];
+    const cx = ICO_V[C * 3], cy = ICO_V[C * 3 + 1], cz = ICO_V[C * 3 + 2];
+    for (let i = 0; i <= n; i++) {
+      for (let j = 0; j <= n - i; j++) {
+        // khoá cho đỉnh nằm trên cạnh/góc (dùng chung giữa các mặt)
+        let key = -1; // -1 = đỉnh bên trong mặt (không dùng chung)
+        if (i === 0 && j === 0) key = 1e9 + A;
+        else if (i === n) key = 1e9 + B;
+        else if (j === n) key = 1e9 + C;
+        else {
+          let u = -1, v = -1, k = 0;
+          if (j === 0) [u, v, k] = [A, B, i];
+          else if (i === 0) [u, v, k] = [A, C, j];
+          else if (i + j === n) [u, v, k] = [B, C, j];
+          if (u >= 0) {
+            if (u > v) [u, v, k] = [v, u, n - k];
+            key = (u * 12 + v) * (n + 1) + k;
+          }
+        }
+        let id;
+        if (key !== -1) {
+          id = shared.get(key);
+          if (id === undefined) {
+            const fi = i / n, fj = j / n;
+            id = add(ax + (bx - ax) * fi + (cx - ax) * fj, ay + (by - ay) * fi + (cy - ay) * fj, az + (bz - az) * fi + (cz - az) * fj);
+            shared.set(key, id);
+          }
+        } else {
+          const fi = i / n, fj = j / n;
+          id = add(ax + (bx - ax) * fi + (cx - ax) * fj, ay + (by - ay) * fi + (cy - ay) * fj, az + (bz - az) * fi + (cz - az) * fj);
+        }
+        grid[i * (n + 1) + j] = id;
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n - i; j++) {
+        const p00 = grid[i * (n + 1) + j];
+        const p10 = grid[(i + 1) * (n + 1) + j];
+        const p01 = grid[i * (n + 1) + j + 1];
+        index[ic++] = p00;
+        index[ic++] = p10;
+        index[ic++] = p01;
+        if (i + j < n - 1) {
+          const p11 = grid[(i + 1) * (n + 1) + j + 1];
+          index[ic++] = p10;
+          index[ic++] = p11;
+          index[ic++] = p01;
+        }
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, vc * 3), 3));
+  g.setIndex(new THREE.BufferAttribute(index.subarray(0, ic), 1));
+  return g;
+}
 
 export class Terrain {
   constructor(planetCfg, places) {
@@ -97,11 +187,13 @@ export class Terrain {
     const n2 = this.noise.noise3d(d.x * 4.3 + 7.1, d.y * 4.3, d.z * 4.3);
     let h = 0.62 + 0.42 * n;
     for (const s of this.seas) {
+      if (!near(d, s, s.r * 1.63)) continue;
       const a = angleBetween(d, s.dir);
       const x = a / (s.r * (1 + 0.14 * n2 + 0.12 * n));
       if (x < 1.2) h -= s.depth * (1 - smoothstep(0.5, 1.0, x));
     }
     for (const m of this.hills) {
+      if (!near(d, m, m.r)) continue;
       const a = angleBetween(d, m.dir);
       const x = a / m.r;
       if (x < 1) {
@@ -122,11 +214,13 @@ export class Terrain {
       }
     }
     for (const f of this.flats) {
+      if (!near(d, f, f.r)) continue;
       const a = angleBetween(d, f.dir);
       const w = 1 - smoothstep(0.6, 1.0, a / f.r);
       if (w > 0) h += (f.h - h) * w;
     }
     for (const l of this.ledges) {
+      if (!near(d, l, l.r)) continue;
       const a = angleBetween(d, l.dir);
       const w = 1 - smoothstep(0.55, 1.0, a / l.r);
       if (w > 0 && l.h > h) h += (l.h + 0.06 * n2 - h) * w;
@@ -144,9 +238,15 @@ export class Terrain {
   // Ô ruộng (nếu d nằm trong ruộng): trả về loại ô.
   paddyAt(d) {
     for (const p of this.paddies) {
-      const off = d.clone().multiplyScalar(this.R).sub(p.dir.clone().multiplyScalar(this.R));
-      const x = off.dot(p.frame.side);
-      const z = off.dot(p.frame.fwd);
+      if (!near(d, p, p.r / this.R)) continue;
+      const R = this.R;
+      const ox = (d.x - p.dir.x) * R;
+      const oy = (d.y - p.dir.y) * R;
+      const oz = (d.z - p.dir.z) * R;
+      const S = p.frame.side;
+      const F = p.frame.fwd;
+      const x = ox * S.x + oy * S.y + oz * S.z;
+      const z = ox * F.x + oy * F.y + oz * F.z;
       const dist = Math.hypot(x, z);
       if (dist > p.r * 0.92) continue;
       const cw = 2.3;
@@ -166,7 +266,7 @@ export class Terrain {
 
   ledgeWeight(d) {
     let m = 0;
-    for (const l of this.ledges) m = Math.max(m, 1 - smoothstep(0.5, 0.95, angleBetween(d, l.dir) / l.r));
+    for (const l of this.ledges) if (near(d, l, l.r)) m = Math.max(m, 1 - smoothstep(0.5, 0.95, angleBetween(d, l.dir) / l.r));
     return m;
   }
 
@@ -206,10 +306,7 @@ export class Terrain {
   }
 
   buildMesh(detail = 96, uniforms = { uTime: { value: 0 } }) {
-    let geo = new THREE.IcosahedronGeometry(1, detail);
-    geo.deleteAttribute('normal');
-    geo.deleteAttribute('uv');
-    geo = mergeVertices(geo);
+    const geo = geodesicSphere(detail);
     const pos = geo.attributes.position;
     const col = new Float32Array(pos.count * 3);
     const d = new THREE.Vector3();

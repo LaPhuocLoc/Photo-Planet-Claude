@@ -17,20 +17,20 @@ npm run build      # xuất bản ra dist/ (static, host ở đâu cũng đượ
 
 | | Máy tính | Điện thoại |
 |---|---|---|
-| Đi | `WASD` / phím mũi tên, hoặc click xuống đất | Chạm xuống đất |
-| Chạy | giữ `Shift` | – |
-| Xoay camera | kéo chuột | kéo 1 ngón |
+| Đi | `WASD` / phím mũi tên, hoặc click xuống đất | Đặt ngón tay bất kỳ đâu → joystick, kéo theo hướng muốn đi |
+| Chạy | giữ `Shift` | kéo joystick ra mép vòng |
+| Xoay camera | kéo chuột | ngón thứ 2 kéo (hoặc 2 ngón cùng lúc) |
 | Thu phóng | cuộn chuột (thu hết cỡ → toàn cảnh hành tinh) | chụm 2 ngón |
 | Xem ảnh | tới gần địa điểm rồi bấm `E`, hoặc click thẳng vào landmark | chạm vào bong bóng "Xem ảnh" |
 | Toàn cảnh / nhật ký | `M` / `J` | nút bên phải |
 
-Link thẳng tới một địa điểm: `…/#futatsugame` (id lấy trong `src/data/trips.js`).
+Chọn đảo: `…/?trip=sado`. Link thẳng tới một địa điểm: `…/?trip=sado#futatsugame`.
 
 ## Thêm ảnh / địa điểm
 
-1. Bỏ ảnh gốc (JPG) vào `images/`.
-2. `npm run photos` → sinh bản webp tối ưu (2000px, 1200px, thumbnail) vào `public/photos/` và đọc EXIF (máy, ống kính, khẩu, tốc, ISO, ngày chụp) vào `src/data/photo-meta.json`.
-3. Khai báo trong `src/data/trips.js`:
+1. Bỏ ảnh gốc (JPG) vào `images/<trip-id>/` (ví dụ `images/sado/`).
+2. `npm run photos` (hoặc `npm run photos -- sado`) → sinh webp (2000px, 1200px, thumbnail) vào `public/photos/<trip-id>/` và EXIF vào `src/trips/<trip-id>/photo-meta.json`. Ảnh đã xử lý được bỏ qua.
+3. Khai báo trong `src/trips/<trip-id>/index.js`:
 
 ```js
 {
@@ -48,14 +48,14 @@ Link thẳng tới một địa điểm: `…/#futatsugame` (id lấy trong `src
 
 Muốn landmark mới thì thêm 1 hàm vào `BUILDERS` trong `src/world/landmarks.js` (dựng bằng `GeoBuilder` + `f.put(...)`), và góc đứng xem trong `VIEWS`.
 
-Chuyến đi mới = thêm 1 phần tử vào `TRIPS` (biển, núi, địa điểm, đường đi riêng). Hiện app hiển thị `TRIPS[0]`.
+Chuyến đi mới = thư mục `src/trips/<id>/` (copy từ Sado) + 1 dòng trong `TRIP_LIST` (`src/trips/index.js`). Mỗi đảo là 1 gói JS riêng, chỉ tải khi mở đảo đó nên có 50 đảo thì lần tải đầu vẫn nhẹ như 1 đảo.
 
 ## Cấu trúc
 
 ```
 src/
-  data/trips.js         dữ liệu chuyến đi, địa điểm, ảnh
-  data/photo-meta.json  EXIF (sinh tự động)
+  trips/index.js        danh sách đảo (nhẹ) + tải gói đảo theo ?trip=
+  trips/<id>/           dữ liệu 1 đảo + photo-meta.json (EXIF, sinh tự động)
   world/terrain.js      hàm độ cao hành tinh (biển, núi, ruộng) + mesh
   world/landmarks.js    mô hình từng địa điểm
   world/world.js        đường làng, cột điện, cây cỏ, mây, mòng biển, phà

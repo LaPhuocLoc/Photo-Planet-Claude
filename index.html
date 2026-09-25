@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&family=Zen+Maru+Gothic:wght@500;700;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;900&family=Zen+Maru+Gothic:wght@700&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -66,6 +66,10 @@
       <span>Xem ảnh</span><kbd>E</kbd>
     </button>
 
+    <div class="joystick" id="joystick" aria-hidden="true">
+      <div class="ring"><i></i><i></i><i></i><i></i></div>
+      <div class="knob"></div>
+    </div>
     <div class="pins" id="pins"></div>
     <div class="hint" id="hint"></div>
     <div class="toast" id="toast"></div>
@@ -112,6 +116,10 @@
       <div class="j-bar"><span id="j-bar"></span></div>
       <ol class="j-list" id="j-list"></ol>
       <p class="j-foot">Chạm vào một nơi để bay tới đó.</p>
+      <div class="j-planets" id="j-planets" hidden>
+        <div class="j-kicker">Hành tinh khác</div>
+        <div class="j-plist"></div>
+      </div>
     </aside>
 
     <script type="module" src="/src/main.js"></script>

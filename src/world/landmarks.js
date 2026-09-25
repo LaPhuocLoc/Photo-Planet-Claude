@@ -565,9 +565,13 @@ export const VIEWS = {
   onogame: { at: [0, -3.0], focus: [0.4, 6.0], pick: 4.5 },
 };
 
+// Đảo có thể mang landmark riêng trong gói của nó: trip.builders = { kiểu: (f, world) => … }
+// (cả trip.views / trip.ledges) — ưu tiên hơn bộ dùng chung ở file này.
 export function buildLandmark(world, place) {
   const dir = dirFromLatLon(place.lat, place.lon);
   const f = new SurfaceFrame(world, dir, place.facing ?? 0);
-  BUILDERS[place.landmark]?.(f, world);
+  const fn = world.trip.builders?.[place.landmark] ?? BUILDERS[place.landmark];
+  if (!fn) console.warn(`Chưa có landmark kiểu "${place.landmark}" (${place.id})`);
+  fn?.(f, world);
   return f;
 }

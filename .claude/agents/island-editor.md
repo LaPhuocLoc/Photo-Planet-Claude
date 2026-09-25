@@ -10,17 +10,17 @@ Nhiệm vụ: làm đúng yêu cầu sửa trên đảo được chỉ định. 
 
 ## Luôn làm trước tiên
 1. Đọc **`docs/island-playbook.md`**, nhất là §1 (bản đồ code), §5 (phong cách), §6 (bug đã gặp), §7 (kiểm tra).
-2. Xác định đảo (trip id trong `src/data/trips.js`). Nếu không nói rõ và chỉ có 1 đảo thì là đảo đó.
+2. Xác định đảo (`TRIP_LIST` trong `src/trips/index.js`, dữ liệu ở `src/trips/<id>/index.js`). Nếu không nói rõ và chỉ có 1 đảo thì là đảo đó. Kiểm tra bằng `?trip=<id>`.
 3. Đọc phần code liên quan trước khi sửa. Không đoán cấu trúc.
 
 ## Phân loại yêu cầu → cách làm
 - **Ảnh** (thêm, bớt, thay, đổi thứ tự, đổi caption):
-  - Ảnh gốc đặt vào đúng thư mục của chuyến đi (`images/` hoặc `images/<trip-id>/`, theo cách repo đang làm).
-  - Chạy `npm run photos`, sửa `photos[]` của địa điểm trong `trips.js`.
-  - Xoá ảnh thì bỏ khỏi `trips.js`; xoá file gốc + webp chỉ khi người dùng nói rõ là xoá hẳn.
+  - Ảnh gốc đặt vào `images/<trip-id>/`, chạy `npm run photos -- <trip-id>`, sửa `photos[]` của địa điểm trong
+    `src/trips/<trip-id>/index.js`.
+  - Xoá ảnh thì bỏ khỏi dữ liệu đảo; xoá file gốc + webp chỉ khi người dùng nói rõ là xoá hẳn.
   - Ảnh thuộc nơi mới → thêm địa điểm mới: landmark, VIEWS, route.
   - Ảnh upload qua chat thường mất EXIF; vẫn dùng được, báo lại cho người dùng.
-- **Chữ** (tên, tên bản địa, blurb, caption, ngày): sửa `trips.js`. Giữ giọng văn khách quan, tiếng Việt.
+- **Chữ** (tên, tên bản địa, blurb, caption, ngày): sửa `src/trips/<id>/index.js` (và mục nhẹ trong `TRIP_LIST` nếu đổi tên/ngày). Giữ giọng văn khách quan, tiếng Việt.
 - **Model / bố cục landmark**:
   - Xem lại ảnh gốc của địa điểm, xác định "bố cục chữ ký" (vật chính, hướng, biển/núi ở đâu).
   - Sửa builder trong `landmarks.js` (và VIEWS, LEDGES, decks nếu cần). Nhớ độ cong hành tinh và giới hạn chân trời ~8 đơn vị.
@@ -28,13 +28,13 @@ Nhiệm vụ: làm đúng yêu cầu sửa trên đảo được chỉ định. 
 - **Cảnh vật / sự sống**:
   - Cây, đá: `models.js`, `world.js` (scatter).
   - Người, xe, thú, côn trùng, hoa: `life.js`.
-  - Địa hình: `terrain.js` và `planet` trong `trips.js`.
-- **UI/UX, mobile, album**: `ui.js`, `style.css`, `main.js` (input). Luôn nghĩ tới cả cảm ứng lẫn chuột.
+  - Địa hình: `terrain.js` và `planet` trong dữ liệu đảo.
+- **UI/UX, mobile, album**: `ui.js`, `style.css`, `main.js` (input: chuột click-to-move; cảm ứng joystick nổi + ngón 2 xoay + chụm zoom). Luôn nghĩ tới cả cảm ứng lẫn chuột.
 - **Bug**:
   - Tái hiện trước (screenshot/đo đạc), tìm **nguyên nhân gốc**, rồi mới sửa.
   - Kiểm bằng **kết quả nhìn thấy** (ảnh chụp, `elementFromPoint`), không chỉ bằng trạng thái/class.
   - Nếu lần trước sửa sai thì nói thẳng là đã chẩn đoán sai.
-- **Hiệu năng**: đo `calls/tris` bằng script kiểm tra; giữ ngân sách ở §7.
+- **Hiệu năng / tải trang**: đo `calls/tris` bằng script kiểm tra, `world.timings`; giữ ngân sách + quy tắc ở §7, §8b.
 
 ## Kiểm tra (bắt buộc)
 - Chụp trước/sau ở những địa điểm bị ảnh hưởng (`scripts/verify/tour.mjs`, các VIEW phù hợp, thêm `MOBILE=1` nếu đụng UI/input).
