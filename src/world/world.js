@@ -1,10 +1,11 @@
 // Lắp ráp cả hành tinh: địa hình, biển, đường, cây cối, landmark, mây, chim, phà.
 import * as THREE from 'three';
-import { Terrain, dirFromLatLon, mulberry32, tangentFrame, DEG } from './terrain.js';
+import { Terrain, dirFromLatLon, mulberry32, tangentFrame, DEG, WALKABLE } from './terrain.js';
 import { createWater, createDust } from './sky.js';
 import { Models } from './models.js';
-import { inked, inkedInstanced, vcToon, toon, windMaterial } from './toon.js';
-import { buildLandmark } from './landmarks.js';
+import { GeoBuilder, inked, inkedInstanced, vcToon, toon, windMaterial } from './toon.js';
+import { buildLandmark, LEDGES, VIEWS } from './landmarks.js';
+import { buildLife } from './life.js';
 import { orientOnSurface } from './surface.js';
 
 const _o = new THREE.Object3D();
@@ -38,6 +39,41 @@ export class World {
       return { ...p, facing, dir, frame: tangentFrame(dir, facing) };
     });
     this.roadDirs = [];
+    this.decks = []; // mặt đi được ngoài địa hình (cầu)
+    this.walkMeshes = []; // mesh chạm/click để đi (ngoài địa hình)
+    this.playerPos = new THREE.Vector3();
+    // đường làng đi vào điểm đứng xem (phía trước landmark), không xuyên qua landmark
+    for (const p of this.places) {
+      const at = (VIEWS[p.landmark] ?? VIEWS.default).at;
+      p.approach = p.dir.clone().multiplyScalar(this.R).addScaledVector(p.frame.side, at[0]).addScaledVector(p.frame.fwd, at[1] - 0.6).normalize();
+    }
+    // mỏm đá landmark cần → đưa vào địa hình trước khi dựng mesh
+    for (const p of this.places) {
+      for (const [x, z, r, h] of LEDGES[p.landmark] ?? []) {
+        const d = p.dir.clone().multiplyScalar(this.R).addScaledVector(p.frame.side, x).addScaledVector(p.frame.fwd, z).normalize();
+        this.terrain.ledges.push({ dir: d, r: r / this.R, h });
+      }
+    }
+  }
+
+  // độ cao mặt cầu tại d (hoặc null nếu không đứng trên cầu)
+  deckHeight(d) {
+    for (const k of this.decks) {
+      const off = _v2.copy(d).multiplyScalar(this.R).addScaledVector(k.center, -this.R);
+      const x = off.dot(k.axis);
+      if (Math.abs(x) > k.half) continue;
+      if (Math.abs(off.dot(k.across)) > k.width) continue;
+      return k.height(x);
+    }
+    return null;
+  }
+  heightAt(d) {
+    const h = this.terrain.height(d);
+    const dh = this.decks.length ? this.deckHeight(d) : null;
+    return dh != null && dh > h ? dh : h;
+  }
+  walkable(d) {
+    return this.terrain.height(d) > WALKABLE || (this.decks.length > 0 && this.deckHeight(d) != null);
   }
 
   // hướng (độ) nhìn ra vùng nước sâu gần nhất
@@ -59,7 +95,7 @@ export class World {
   }
 
   build() {
-    this.terrainMesh = this.terrain.buildMesh(96);
+    this.terrainMesh = this.terrain.buildMesh(110, this.uniforms);
     this.group.add(this.terrainMesh);
     this.water = createWater(this.R, this.uniforms);
     this.group.add(this.water);
@@ -71,6 +107,7 @@ export class World {
     this.buildFerry();
     this.dust = createDust(this.R);
     this.group.add(this.dust);
+    this.life = buildLife(this);
     return this;
   }
 
@@ -85,8 +122,8 @@ export class World {
     const pts = [];
     const step = 0.42;
     for (let s = 0; s < route.length - 1; s++) {
-      const a = route[s].dir;
-      const b = route[s + 1].dir;
+      const a = route[s].approach;
+      const b = route[s + 1].approach;
       const th = Math.acos(Math.min(1, a.dot(b)));
       const n = Math.max(2, Math.ceil((th * this.R) / step));
       const tan = new THREE.Vector3();
@@ -157,6 +194,34 @@ export class World {
     this.group.add(mk(pos, idx, 0xb3c2b6, -2));
     this.group.add(mk(dash, didx, 0xf4f1e6, -4));
     this.buildPoles(poles);
+    this.buildSteps(pts);
+  }
+
+  // bậc thang đá ở những đoạn đường dốc
+  buildSteps(pts) {
+    const list = [];
+    const hs = pts.map((d) => Math.max(this.terrain.height(d), 0.12));
+    for (let i = 1; i < pts.length - 1; i++) {
+      const dh = Math.abs(hs[i + 1] - hs[i - 1]) / 2;
+      if (dh < 0.15 || this.nearPlace(pts[i], 0)) continue;
+      list.push(i);
+    }
+    if (!list.length) return;
+    const b = new GeoBuilder();
+    b.add(new THREE.BoxGeometry(1.2, 0.5, 0.46), 0xb9b4a5, { pos: [0, -0.17, 0] });
+    b.add(new THREE.BoxGeometry(1.24, 0.05, 0.12), 0xa29d8f, { pos: [0, 0.07, 0.19] });
+    const { mesh, line } = inkedInstanced(b.build(), vcToon(), list.length, { outline: 0.015, cast: false });
+    list.forEach((i, k) => {
+      const d = pts[i];
+      const tan = pts[i + 1].clone().sub(pts[i - 1]);
+      if (hs[i + 1] < hs[i - 1]) tan.negate(); // mặt bậc quay về phía dưới dốc
+      _o.position.copy(d).multiplyScalar(this.R + hs[i] + 0.02);
+      orientOnSurface(_o, d, tan.negate());
+      _o.scale.setScalar(1);
+      _o.updateMatrix();
+      mesh.setMatrixAt(k, _o.matrix);
+    });
+    this.group.add(mesh, line);
   }
 
   buildPoles(poles) {
@@ -224,7 +289,7 @@ export class World {
   scatter() {
     const T = this.terrain;
     const rnd = this.rnd;
-    const sets = { tree0: [], tree1: [], tree2: [], pine: [], bush: [], rock: [], grass: [], rice: [] };
+    const sets = { tree0: [], tree1: [], tree2: [], pine: [], matsu: [], bush: [], rock: [], boulder0: [], boulder1: [], boulder2: [], grass: [], rice: [] };
     const houses = [[], [], [], []];
     const d = new THREE.Vector3();
     for (let i = 0; i < 14000; i++) {
@@ -234,16 +299,24 @@ export class World {
         if (h > -0.35 && h < 0.1 && rnd() < 0.05 && !this.nearPlace(d, 0.5)) sets.rock.push({ d: d.clone(), s: 0.5 + rnd() * 1.1, sink: 0.12 });
         continue;
       }
-      if (T.paddyAt(d)) continue;
+      if (T.paddyAt(d) || (T.ledges.length && T.ledgeWeight(d) > 0.2)) continue;
       const roadNear = this.nearRoad(d, 1.2);
       if (!roadNear && rnd() < 0.45) sets.grass.push({ d: d.clone(), s: 0.8 + rnd() * 0.8 });
       if (roadNear || this.nearPlace(d, 3.5) || this.nearRoad(d, 1.8)) continue;
       const forest = T.forestAt(d);
-      if (forest > 0.12 && rnd() < 0.42) {
-        if (h > 2.0 || rnd() < 0.25) sets.pine.push({ d: d.clone(), s: 0.8 + rnd() * 0.6, r: 0.25 });
-        else sets[`tree${Math.floor(rnd() * 3)}`].push({ d: d.clone(), s: 0.75 + rnd() * 0.65, r: 0.3 });
-      } else if (rnd() < 0.025) sets[`tree${Math.floor(rnd() * 3)}`].push({ d: d.clone(), s: 0.7 + rnd() * 0.5, r: 0.3 });
-      else if (rnd() < 0.06) sets.bush.push({ d: d.clone(), s: 0.7 + rnd() * 0.8 });
+      const tree = (s0, s1) => {
+        const u = rnd();
+        const k = u < 0.4 ? 'tree0' : u < 0.7 ? 'tree1' : 'tree2';
+        sets[k].push({ d: d.clone(), s: s0 + rnd() * s1, r: 0.3 });
+      };
+      if (forest > 0.12 && rnd() < 0.34) {
+        if (h > 2.0 || rnd() < 0.2) sets.pine.push({ d: d.clone(), s: 0.8 + rnd() * 0.7, r: 0.25 });
+        else if (h < 0.7 && rnd() < 0.5) sets.matsu.push({ d: d.clone(), s: 0.8 + rnd() * 0.5, r: 0.3 });
+        else tree(0.65, 0.75);
+      } else if (h < 0.55 && rnd() < 0.02) sets.matsu.push({ d: d.clone(), s: 0.8 + rnd() * 0.5, r: 0.3 });
+      else if (rnd() < 0.02) tree(0.6, 0.6);
+      else if (rnd() < 0.07) sets.bush.push({ d: d.clone(), s: 0.7 + rnd() * 0.9 });
+      else if (h > 0.9 && rnd() < 0.022) sets[`boulder${Math.floor(rnd() * 3)}`].push({ d: d.clone(), s: 0.55 + rnd() * 0.9, sink: 0.2, r: 0.95 });
       else if (h > 1.6 && rnd() < 0.03) sets.rock.push({ d: d.clone(), s: 0.6 + rnd() * 0.8, sink: 0.1 });
     }
     // cỏ quanh landmark (không đè lên đường)
@@ -252,8 +325,19 @@ export class World {
         const a = rnd() * Math.PI * 2;
         const r = Math.sqrt(rnd()) * (p.flat.r + 1);
         d.copy(p.dir).multiplyScalar(this.R).addScaledVector(p.frame.side, Math.cos(a) * r).addScaledVector(p.frame.fwd, Math.sin(a) * r).normalize();
-        if (T.height(d) < 0.16 || T.paddyAt(d) || this.nearRoad(d, 0.7)) continue;
+        if (T.height(d) < 0.16 || T.paddyAt(d) || T.ledgeWeight(d) > 0.2 || this.nearRoad(d, 0.7)) continue;
         sets.grass.push({ d: d.clone(), s: 0.8 + rnd() * 0.7 });
+      }
+    }
+    // tảng đá lớn "đóng khung" quanh landmark (như vách đá trong tranh)
+    for (const p of this.places) {
+      for (let i = 0; i < 9; i++) {
+        const a = rnd() * Math.PI * 2;
+        const r = p.flat.r + 1.5 + rnd() * 3.5;
+        d.copy(p.dir).multiplyScalar(this.R).addScaledVector(p.frame.side, Math.cos(a) * r).addScaledVector(p.frame.fwd, Math.sin(a) * r).normalize();
+        const h = T.height(d);
+        if (h < 0.25 || T.paddyAt(d) || this.nearRoad(d, 1.6) || this.nearPlace(d, 1.0)) continue;
+        sets[`boulder${i % 3}`].push({ d: d.clone(), s: 0.7 + rnd() * 1.0, sink: 0.25, r: 0.95 });
       }
     }
     // nhà dọc đường làng
@@ -276,12 +360,21 @@ export class World {
       tree1: Models.tree(1),
       tree2: Models.tree(2),
       pine: Models.pine(),
+      matsu: Models.matsu(),
       bush: Models.bush(),
       rock: Models.rock(),
+      boulder0: Models.boulder(1, 0),
+      boulder1: Models.boulder(4, 1),
+      boulder2: Models.boulder(9, 2),
     };
-    for (const k of Object.keys(geos)) this.instances(geos[k], sets[k], { outline: k === 'rock' ? 0.025 : 0.03 });
+    // cây lay nhẹ theo gió + vân chùm lá vẽ tay
+    const treeMat = windMaterial(0xffffff, this.uniforms, { strength: 0.012, vertexColors: true, leaf: true });
+    for (const k of Object.keys(geos)) {
+      const leafy = /tree|pine|matsu|bush/.test(k);
+      this.instances(geos[k], sets[k], { outline: k === 'rock' ? 0.025 : k.startsWith('boulder') ? 0.035 : 0.03, mat: leafy ? treeMat : vcToon() });
+    }
     houses.forEach((list, v) => this.instances(Models.house(v), list, { outline: 0.025, faceKey: true }));
-    for (const k of ['tree0', 'tree1', 'tree2', 'pine']) for (const it of sets[k]) this.colliders.push({ dir: it.d, r: it.r * it.s });
+    for (const k of ['tree0', 'tree1', 'tree2', 'pine', 'matsu', 'boulder0', 'boulder1', 'boulder2']) for (const it of sets[k]) this.colliders.push({ dir: it.d, r: it.r * it.s });
 
     // cỏ + lúa lay theo gió
     const grassMat = windMaterial(0xffffff, this.uniforms, { strength: 0.1, vertexColors: true });
@@ -303,8 +396,21 @@ export class World {
     this.instances(Models.rice(), riceSet, { outline: 0, mat: riceMat, cast: false });
   }
 
-  instances(geo, list, { outline = 0.03, mat = vcToon(), cast = true, faceKey = false } = {}) {
+  // Chia instance theo vùng trên hành tinh để frustum culling bỏ qua phần không nhìn thấy
+  // (cả pass bóng đổ) — giảm mạnh số tam giác phải vẽ.
+  instances(geo, list, opts = {}) {
     if (!list.length) return;
+    if (list.length < 40) return this.instanceChunk(geo, list, opts);
+    const buckets = new Map();
+    for (const it of list) {
+      const k = `${Math.round(it.d.x * 1.3)},${Math.round(it.d.y * 1.3)},${Math.round(it.d.z * 1.3)}`;
+      if (!buckets.has(k)) buckets.set(k, []);
+      buckets.get(k).push(it);
+    }
+    for (const sub of buckets.values()) this.instanceChunk(geo, sub, opts);
+  }
+
+  instanceChunk(geo, list, { outline = 0.03, mat = vcToon(), cast = true, faceKey = false } = {}) {
     const { mesh, line } = inkedInstanced(geo, mat, list.length, { outline, cast });
     const rnd = this.rnd;
     list.forEach((it, i) => {
@@ -324,8 +430,15 @@ export class World {
       }
     });
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    mesh.boundingSphere.radius += 1.5; // chừa biên cho cây lay theo gió
+    mesh.frustumCulled = true;
     this.group.add(mesh);
-    if (line) this.group.add(line);
+    if (line) {
+      line.boundingSphere = mesh.boundingSphere;
+      line.frustumCulled = true;
+      this.group.add(line);
+    }
     return mesh;
   }
 

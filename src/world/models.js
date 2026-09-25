@@ -1,6 +1,7 @@
 // Mô hình low-poly dựng từ khối cơ bản, màu theo đỉnh.
 import * as THREE from 'three';
-import { GeoBuilder } from './toon.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { GeoBuilder, addOutlineNormals } from './toon.js';
 
 const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 const cyl = (rt, rb, h, s = 8) => new THREE.CylinderGeometry(rt, rb, h, s);
@@ -19,28 +20,154 @@ function gableRoof(w, d, h) {
   return g;
 }
 
+// Cành/thân: hình trụ thuôn từ A → B
+const _q = new THREE.Quaternion();
+const _m = new THREE.Matrix4();
+const _Y = new THREE.Vector3(0, 1, 0);
+function limb(b, a, c, r0, r1, color) {
+  const A = new THREE.Vector3(...a);
+  const B = new THREE.Vector3(...c);
+  const dir = B.clone().sub(A);
+  const len = dir.length();
+  const g = new THREE.CylinderGeometry(r1, r0, len, 6);
+  g.translate(0, len / 2, 0);
+  _q.setFromUnitVectors(_Y, dir.normalize());
+  _m.compose(A, _q, new THREE.Vector3(1, 1, 1));
+  b.add(g, color, { matrix: _m });
+}
+// Tán lá lổn nhổn (méo ngẫu nhiên để viền mực trông như vẽ tay)
+function blob(b, r, color, pos, seed = 0, scale = [1, 0.86, 1]) {
+  const g = new THREE.IcosahedronGeometry(r, 1);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    const k = 1 + 0.12 * Math.sin((x * 7.1 + seed) / r) * Math.sin((z * 6.3 - seed) / r) + 0.07 * Math.sin((y * 9.7 + seed * 3) / r);
+    p.setXYZ(i, x * k, y * k, z * k);
+  }
+  g.computeVertexNormals();
+  b.add(g, color, { pos, scale });
+}
+
 export const Models = {
+  // Cây lá rộng có chạc nhánh. v: 0 = trung bình, 1 = cao mảnh, 2 = thấp tròn
   tree(v = 0) {
     const b = new GeoBuilder();
-    const greens = [
-      [0x5fae5c, 0x78c065, 0x4d9a55],
-      [0x6fb85e, 0x8fcb6c, 0x5aa65a],
-      [0x4f9d5a, 0x66b060, 0x3f8a52],
+    const G = [
+      [0x5aa65a, 0x76bd64, 0x4a9555, 0x86c96d],
+      [0x4f9c58, 0x68b25f, 0x3f8a50, 0x7cbf66],
+      [0x6cb65e, 0x8acb6c, 0x5aa65a, 0x9ad374],
     ][v % 3];
-    b.add(cyl(0.07, 0.11, 1.0, 6), 0x7a5a48, { pos: [0, 0.5, 0] });
-    b.add(ico(0.62, 1), greens[0], { pos: [0, 1.25, 0], scale: [1, 0.9, 1] });
-    b.add(ico(0.44, 1), greens[1], { pos: [0.34, 1.52, 0.14] });
-    b.add(ico(0.4, 1), greens[2], { pos: [-0.3, 1.02, -0.2] });
-    b.add(ico(0.34, 1), greens[1], { pos: [-0.12, 1.72, -0.12] });
+    const BARK = 0x6e5445;
+    if (v === 0) {
+      limb(b, [0, 0, 0], [0.06, 1.1, 0], 0.14, 0.095, BARK);
+      limb(b, [0.06, 1.1, 0], [-0.04, 1.95, 0.05], 0.095, 0.06, BARK);
+      limb(b, [0.06, 1.05, 0], [0.7, 1.8, 0.2], 0.065, 0.03, BARK);
+      limb(b, [0.02, 1.4, 0], [-0.62, 2.05, -0.25], 0.06, 0.03, BARK);
+      limb(b, [-0.04, 1.9, 0.05], [0.28, 2.5, -0.1], 0.05, 0.025, BARK);
+      blob(b, 0.56, G[0], [0.74, 1.98, 0.22], 1);
+      blob(b, 0.6, G[1], [-0.66, 2.2, -0.25], 2);
+      blob(b, 0.72, G[0], [0.08, 2.66, 0], 3);
+      blob(b, 0.46, G[3], [0.28, 2.34, 0.42], 4);
+      blob(b, 0.42, G[2], [-0.25, 2.02, 0.38], 5);
+      blob(b, 0.38, G[1], [0.3, 3.05, -0.15], 6);
+    } else if (v === 1) {
+      limb(b, [0, 0, 0], [0.1, 1.6, 0], 0.12, 0.085, BARK);
+      limb(b, [0.1, 1.6, 0], [-0.05, 3.1, 0.05], 0.085, 0.05, BARK);
+      limb(b, [0.08, 1.5, 0], [0.45, 1.85, 0.1], 0.035, 0.015, BARK);
+      limb(b, [0.02, 2.2, 0], [-0.5, 2.55, -0.1], 0.04, 0.018, BARK);
+      limb(b, [0.0, 2.6, 0], [0.55, 2.95, 0.1], 0.04, 0.018, BARK);
+      blob(b, 0.4, G[2], [-0.52, 2.6, -0.1], 7);
+      blob(b, 0.8, G[0], [0, 3.45, 0], 8);
+      blob(b, 0.55, G[1], [0.55, 3.05, 0.12], 9);
+      blob(b, 0.5, G[3], [-0.42, 3.2, -0.12], 10);
+      blob(b, 0.48, G[0], [0.15, 3.95, 0.05], 11);
+      blob(b, 0.3, G[1], [0.48, 1.9, 0.1], 12);
+    } else {
+      limb(b, [0, 0, 0], [0.02, 0.7, 0], 0.1, 0.07, BARK);
+      limb(b, [0.02, 0.65, 0], [0.4, 1.1, 0.1], 0.05, 0.025, BARK);
+      limb(b, [0.02, 0.7, 0], [-0.35, 1.15, -0.1], 0.05, 0.025, BARK);
+      blob(b, 0.5, G[0], [0.35, 1.25, 0.1], 13);
+      blob(b, 0.52, G[1], [-0.32, 1.3, -0.1], 14);
+      blob(b, 0.56, G[3], [0, 1.6, 0], 15);
+      blob(b, 0.34, G[2], [0.05, 1.15, 0.35], 16);
+    }
     return b.build();
   },
+  // Thông Nhật (matsu): thân nghiêng uốn lượn, các tầng tán dẹt
+  matsu() {
+    const b = new GeoBuilder();
+    const BARK = 0x5d4a3e;
+    limb(b, [0, 0, 0], [0.32, 1.0, 0], 0.12, 0.09, BARK);
+    limb(b, [0.32, 1.0, 0], [0.18, 1.85, 0.1], 0.09, 0.065, BARK);
+    limb(b, [0.18, 1.85, 0.1], [-0.22, 2.45, 0], 0.065, 0.04, BARK);
+    limb(b, [0.3, 1.2, 0], [1.0, 1.55, 0.1], 0.05, 0.025, BARK);
+    limb(b, [0.2, 1.7, 0.1], [-0.65, 2.0, 0.25], 0.045, 0.022, BARK);
+    limb(b, [0.18, 1.9, 0.1], [0.55, 2.2, -0.5], 0.04, 0.02, BARK);
+    const pad = (r, c, pos, seed) => blob(b, r, c, pos, seed, [1.25, 0.42, 1.0]);
+    pad(0.55, 0x3f7d52, [1.05, 1.68, 0.1], 21);
+    pad(0.5, 0x4a8a5b, [-0.7, 2.1, 0.25], 22);
+    pad(0.55, 0x3a7650, [-0.2, 2.62, 0], 23);
+    pad(0.42, 0x4a8a5b, [0.6, 2.32, -0.5], 24);
+    pad(0.32, 0x55966a, [-0.1, 2.9, 0.05], 25);
+    return b.build();
+  },
+  // Tuyết tùng / thông nón (cao, dùng ở landmark)
   pine() {
     const b = new GeoBuilder();
-    b.add(cyl(0.06, 0.1, 1.0, 6), 0x6e5242, { pos: [0, 0.5, 0] });
-    b.add(new THREE.ConeGeometry(0.62, 0.9, 7), 0x3f8456, { pos: [0, 1.0, 0] });
-    b.add(new THREE.ConeGeometry(0.5, 0.8, 7), 0x4a9460, { pos: [0, 1.45, 0] });
-    b.add(new THREE.ConeGeometry(0.34, 0.65, 7), 0x57a166, { pos: [0, 1.9, 0] });
+    limb(b, [0, 0, 0], [0, 1.2, 0], 0.1, 0.06, 0x6e5242);
+    b.add(new THREE.ConeGeometry(0.66, 0.95, 8), 0x3f8456, { pos: [0, 1.05, 0] });
+    b.add(new THREE.ConeGeometry(0.54, 0.85, 8), 0x4a9460, { pos: [0, 1.5, 0], rot: [0, 0.4, 0] });
+    b.add(new THREE.ConeGeometry(0.4, 0.75, 8), 0x57a166, { pos: [0, 1.95, 0], rot: [0, 0.8, 0] });
+    b.add(new THREE.ConeGeometry(0.24, 0.55, 8), 0x5fa96c, { pos: [0, 2.35, 0] });
     return b.build();
+  },
+  // Tảng đá lớn màu be, phủ rêu xanh ở mặt trên (giống vách đá trong tranh).
+  // kind 0: phiến dẹt, 1: khối đứng, 2: cụm nhiều tảng
+  boulder(seed = 1, kind = 0) {
+    const chunk = (sx, sy, sz, off, sd) => {
+      let g = new THREE.IcosahedronGeometry(1, 1);
+      const p = g.attributes.position;
+      const v = new THREE.Vector3();
+      for (let i = 0; i < p.count; i++) {
+        v.fromBufferAttribute(p, i);
+        const k = 1 + 0.26 * Math.sin(v.x * 2.3 + sd) * Math.cos(v.z * 2.9 - sd * 1.3) + 0.16 * Math.sin(v.y * 3.7 + v.x * 2 + sd * 2);
+        v.multiplyScalar(k);
+        if (v.y > 0.45) v.y = 0.45 + (v.y - 0.45) * 0.35; // mặt trên phẳng như bậc đá
+        if (v.y < -0.3) v.y = -0.3 - (v.y + 0.3) * 0.15;
+        p.setXYZ(i, v.x * sx + off[0], v.y * sy + off[1], v.z * sz + off[2]);
+      }
+      g.deleteAttribute('uv');
+      g.deleteAttribute('normal');
+      return g;
+    };
+    const parts =
+      kind === 0
+        ? [chunk(1.5, 0.55, 1.1, [0, 0, 0], seed)]
+        : kind === 1
+          ? [chunk(0.8, 1.15, 0.85, [0, 0.35, 0], seed)]
+          : [chunk(0.9, 0.8, 0.8, [-0.4, 0.15, 0], seed), chunk(0.7, 0.55, 0.7, [0.65, 0, 0.3], seed + 3), chunk(0.5, 0.4, 0.5, [0.2, -0.05, -0.7], seed + 7)];
+    let g = parts.length > 1 ? mergeGeometries(parts) : parts[0];
+    g = g.index ? g.toNonIndexed() : g;
+    g.computeVertexNormals();
+    const n = g.attributes.normal;
+    const pos = g.attributes.position;
+    const col = new Float32Array(pos.count * 3);
+    const c = new THREE.Color();
+    const BE = [new THREE.Color(0xdccda8), new THREE.Color(0xcfbe97), new THREE.Color(0xe6d9b8), new THREE.Color(0xc4b38c)];
+    const MOSS = [new THREE.Color(0x6aa65a), new THREE.Color(0x5a9a52), new THREE.Color(0x7cb466)];
+    for (let f = 0; f < pos.count; f += 3) {
+      const ny = (n.getY(f) + n.getY(f + 1) + n.getY(f + 2)) / 3;
+      const cx = pos.getX(f) * 1.3 + pos.getZ(f) * 1.7;
+      const mossy = (ny > 0.55 && Math.sin(cx * 3.1 + seed) > -0.5) || (ny > 0.2 && Math.sin(cx * 5.3 + seed * 2) > 0.75);
+      c.copy(mossy ? MOSS[(f / 3) % 3] : BE[(f / 3 + seed) % 4]);
+      for (let k = 0; k < 3; k++) col.set([c.r, c.g, c.b], (f + k) * 3);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    addOutlineNormals(g);
+    g.computeBoundingSphere();
+    return g;
   },
   bush() {
     const b = new GeoBuilder();

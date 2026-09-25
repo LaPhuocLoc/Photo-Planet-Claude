@@ -16,7 +16,8 @@ const isTouch = matchMedia('(hover: none)').matches;
 
 // ── Renderer / scene ─────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// điện thoại: giới hạn độ phân giải + bóng đổ để giữ FPS mượt
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouch ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -30,7 +31,7 @@ const hemi = new THREE.HemisphereLight(0xe4f7f0, 0x86b69a, 1.35);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff4e0, 2.3);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(isTouch ? 1024 : 2048, isTouch ? 1024 : 2048);
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.04;
 sun.shadow.camera.near = 1;
@@ -79,7 +80,8 @@ requestAnimationFrame(() =>
       const v = VIEWS[p.landmark] ?? VIEWS.default;
       p.view = v;
       p.focus = world.surfacePoint(dirAtLocal(p, v.focus[0], v.focus[1]), 2.2);
-      const s = new THREE.Mesh(new THREE.SphereGeometry(v.pick, 12, 8), new THREE.MeshBasicMaterial({ visible: false }));
+      // vùng click landmark (chỉ dùng với chuột; trên cảm ứng chạm = luôn là đi)
+      const s = new THREE.Mesh(new THREE.SphereGeometry(v.pick * 0.6, 12, 8), new THREE.MeshBasicMaterial({ visible: false }));
       s.position.copy(p.focus);
       s.userData.placeId = p.id;
       scene.add(s);
@@ -127,7 +129,7 @@ function start() {
   ui.setMapActive(false);
   ui.showHint(
     isTouch
-      ? 'Chạm mặt đất để đi · Kéo để xoay · Chụm để thu phóng · Tới gần địa điểm để xem ảnh'
+      ? 'Chạm để đi · Giữ ngón tay để đi theo · Kéo để xoay · Chụm để thu phóng · Tới gần địa điểm để xem ảnh'
       : 'WASD / click để đi · Kéo chuột để xoay · Cuộn để thu phóng · Shift chạy · M bản đồ · E xem ảnh',
     11000,
   );
@@ -204,11 +206,25 @@ window.addEventListener('blur', () => keys.clear());
 const pointers = new Map();
 let dragMoved = 0;
 let pinchDist = 0;
+// giữ ngón tay trên mặt đất ~0.25s → nhân vật đi theo ngón tay
+const hold = { active: false, timer: 0, x: 0, y: 0, last: 0 };
+const tapSlop = (e) => (e.pointerType === 'mouse' ? 6 : 12);
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
   dragMoved = 0;
+  clearTimeout(hold.timer);
+  hold.active = false;
+  if (pointers.size === 1 && e.pointerType !== 'mouse') {
+    hold.x = e.clientX;
+    hold.y = e.clientY;
+    hold.timer = setTimeout(() => {
+      if (pointers.size === 1 && dragMoved <= tapSlop(e) && rig?.mode === 'explore') hold.active = true;
+    }, 260);
+  }
   if (pointers.size === 2) {
+    clearTimeout(hold.timer);
+    hold.active = false;
     const [a, b] = [...pointers.values()];
     pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
   }
@@ -228,16 +244,28 @@ canvas.addEventListener('pointermove', (e) => {
     dragMoved = 99;
     return;
   }
+  if (hold.active) {
+    hold.x = e.clientX;
+    hold.y = e.clientY;
+    return;
+  }
   dragMoved += Math.abs(dx) + Math.abs(dy);
-  if (dragMoved > 6) {
+  if (dragMoved > tapSlop(e)) {
+    clearTimeout(hold.timer);
     canvas.classList.add('dragging');
     rig.drag(dx, dy);
   }
 });
 const endPointer = (e) => {
-  const had = pointers.delete(e.pointerId);
+  const had = pointers.get(e.pointerId);
+  pointers.delete(e.pointerId);
   canvas.classList.remove('dragging');
-  if (had && pointers.size === 0 && dragMoved <= 6 && e.type === 'pointerup') handleClick(e.clientX, e.clientY);
+  clearTimeout(hold.timer);
+  if (hold.active) {
+    hold.active = false;
+    return;
+  }
+  if (had && pointers.size === 0 && dragMoved <= tapSlop(e) && e.type === 'pointerup') handleClick(e.clientX, e.clientY, e.pointerType);
 };
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
@@ -255,11 +283,14 @@ function handleZoom(delta) {
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 let marker;
-function handleClick(x, y) {
-  if (!started || !world || ui.gallery.open) return;
+function groundHit(x, y) {
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  const tHit = raycaster.intersectObject(world.terrainMesh, false)[0];
+  return raycaster.intersectObjects([world.terrainMesh, ...world.walkMeshes], false)[0];
+}
+function handleClick(x, y, pointerType = 'mouse') {
+  if (!started || !world || ui.gallery.open) return;
+  const tHit = groundHit(x, y);
   if (rig.mode === 'planet') {
     if (!tHit) return;
     const d = tHit.point.clone().normalize();
@@ -279,8 +310,8 @@ function handleClick(x, y) {
     }
     return;
   }
-  const pHit = raycaster.intersectObjects(pickers, false)[0];
-  if (pHit && (!tHit || pHit.distance < tHit.distance + 2)) {
+  const pHit = pointerType === 'mouse' ? raycaster.intersectObjects(pickers, false)[0] : null;
+  if (pHit && (!tHit || pHit.distance < tHit.distance + 0.5)) {
     const p = world.places.find((q) => q.id === pHit.object.userData.placeId);
     if (p === nearPlace) return openPlace(p);
     const v = p.view;
@@ -351,6 +382,7 @@ function tick() {
   if (!canMove && player.target && rig.mode === 'planet') player.target = null;
   player.update(canMove ? dt : 0, mv, keys.has('shift'), t);
   const b = rig.update(dt, player.speed > 0.2);
+  world.playerPos.copy(player.position);
   world.update(t, dt);
 
   occlusion.uCamPos.value.copy(camera.position);
@@ -391,9 +423,19 @@ function tick() {
     ui.setPlaceTitle(started ? near : null);
   }
   if (nearPlace && started && !ui.gallery.open) {
-    const s = project(nearPlace.focus.clone().addScaledVector(nearPlace.dir, 1.2));
-    ui.setPrompt(s.behind ? null : s);
+    if (isTouch) ui.setPrompt({ dock: true });
+    else {
+      const s = project(nearPlace.focus.clone().addScaledVector(nearPlace.dir, 1.2));
+      ui.setPrompt(s.behind ? null : s);
+    }
   } else ui.setPrompt(null);
+
+  // giữ ngón tay → đi theo ngón tay
+  if (hold.active && t - hold.last > 0.12) {
+    hold.last = t;
+    const h = groundHit(hold.x, hold.y);
+    if (h) player.walkTo(h.point.clone().normalize(), { stopDist: 0.5 });
+  }
 
   // pin toàn cảnh
   if (started) {
@@ -430,6 +472,7 @@ window.__planet = {
   get world() { return world; },
   get player() { return player; },
   get rig() { return rig; },
+  renderer,
   travelTo,
   setMap,
   start,

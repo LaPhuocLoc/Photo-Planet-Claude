@@ -181,7 +181,8 @@ export class UI {
       return;
     }
     el.hidden = false;
-    el.style.transform = `translate(${screen.x}px, ${screen.y}px)`;
+    el.classList.toggle('dock', !!screen.dock);
+    el.style.transform = screen.dock ? '' : `translate(${screen.x}px, ${screen.y}px)`;
   }
 
   // ── pin trên bản đồ hành tinh ─────────────────────────────

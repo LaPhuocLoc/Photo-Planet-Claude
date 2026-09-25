@@ -360,6 +360,24 @@ body.intro-on .hint {
     display: none;
   }
 }
+/* mobile: nút "Xem ảnh" cố định ở dưới, to, dễ bấm bằng ngón cái */
+.prompt.dock {
+  left: 50%;
+  top: auto;
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + 78px);
+  translate: -50% 0;
+  padding: 13px 22px 13px 18px;
+  font-size: 17px;
+  background: var(--gold);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.prompt.dock::after {
+  display: none;
+}
+.prompt.dock svg {
+  width: 24px;
+  height: 24px;
+}
 @keyframes bob {
   0%,
   100% {
@@ -450,7 +468,7 @@ body.intro-on .hint {
     white-space: normal;
     width: calc(100vw - 32px);
     text-align: center;
-    bottom: calc(max(16px, env(safe-area-inset-bottom)) + 92px);
+    bottom: calc(max(16px, env(safe-area-inset-bottom)) + 146px);
   }
 }
 
@@ -985,7 +1003,12 @@ body.intro-on .hint {
     gap: 10px;
   }
   .place-title {
-    bottom: calc(max(16px, env(safe-area-inset-bottom)) + 70px);
+    top: calc(max(16px, env(safe-area-inset-top)) + 64px);
+    bottom: auto;
+    left: 16px;
+  }
+  .pt-name {
+    font-size: 28px;
   }
   .intro {
     align-items: center;

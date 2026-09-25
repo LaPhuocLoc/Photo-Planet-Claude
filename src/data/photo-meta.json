@@ -97,5 +97,16 @@
     "iso": 100,
     "focal": 20,
     "date": "2026-09-20T04:44:17.000Z"
+  },
+  "yajima-bridge": {
+    "w": 2000,
+    "h": 1333,
+    "camera": null,
+    "lens": null,
+    "f": null,
+    "shutter": null,
+    "iso": null,
+    "focal": null,
+    "date": null
   }
 }

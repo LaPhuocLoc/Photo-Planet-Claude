@@ -238,7 +238,17 @@ export class GeoBuilder {
 }
 
 // Lắc lư theo gió cho cỏ / lúa (gắn vào MeshToonMaterial).
-export function windMaterial(color, uniforms, { strength = 0.12, vertexColors = false } = {}) {
+const LEAF_GLSL = /* glsl */ `
+  varying vec3 vLeafP;
+  float lhash(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+  float lnoise(vec3 p) {
+    vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(lhash(i), lhash(i + vec3(1,0,0)), f.x), mix(lhash(i + vec3(0,1,0)), lhash(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(lhash(i + vec3(0,0,1)), lhash(i + vec3(1,0,1)), f.x), mix(lhash(i + vec3(0,1,1)), lhash(i + vec3(1,1,1)), f.x), f.y), f.z);
+  }
+`;
+// leaf: vẽ thêm vân chùm lá (mảng tối + đốm sáng) lên phần màu xanh — giống tán cây vẽ tay
+export function windMaterial(color, uniforms, { strength = 0.12, vertexColors = false, leaf = false } = {}) {
   const mat = new THREE.MeshToonMaterial({ color, gradientMap: toonGradient(), vertexColors });
   withOcclusion(mat);
   const occ = mat.onBeforeCompile;
@@ -258,9 +268,28 @@ export function windMaterial(color, uniforms, { strength = 0.12, vertexColors = 
         float ph = uTime * 1.7 + ip.x * 0.35 + ip.y * 0.27 + ip.z * 0.31;
         float sway = (sin(ph) * 0.7 + sin(ph * 2.3 + 1.3) * 0.3) * ${strength.toFixed(3)} * max(position.y, 0.0) * 3.0;
         transformed.x += sway;
-        transformed.z += sway * 0.6;`,
+        transformed.z += sway * 0.6;${leaf ? '\n        vLeafP = position;' : ''}`,
       );
+    if (leaf) {
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLeafP;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\n${LEAF_GLSL}`)
+        .replace(
+          '#include <color_fragment>',
+          /* glsl */ `#include <color_fragment>
+          {
+            float foliage = step(diffuseColor.r * 1.12, diffuseColor.g) * step(0.25, diffuseColor.g);
+            vec3 q = vLeafP * 5.5;
+            float n1 = lnoise(q);
+            float n2 = lnoise(q * 2.4 + 17.0);
+            float clump = smoothstep(0.6, 0.63, n1 * 0.7 + n2 * 0.4);
+            float fleck = smoothstep(0.78, 0.8, n2);
+            diffuseColor.rgb *= 1.0 - clump * 0.2 * foliage;
+            diffuseColor.rgb += fleck * 0.08 * foliage;
+          }`,
+        );
+    }
   };
-  mat.customProgramCacheKey = () => `wind${strength}`;
+  mat.customProgramCacheKey = () => `wind${strength}${leaf}`;
   return mat;
 }

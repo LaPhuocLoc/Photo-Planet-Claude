@@ -58,6 +58,8 @@ const PAL = {
   goldB: C(0xd8b04a),
   paddyGreen: C(0xb4d46c),
   levee: C(0x6fae5a),
+  basalt: C(0x4a4642),
+  basaltHi: C(0x625b53),
 };
 
 export class Terrain {
@@ -67,6 +69,7 @@ export class Terrain {
     this.seas = planetCfg.seas.map((s) => ({ dir: dirFromLatLon(s.lat, s.lon), r: s.r * DEG, depth: s.depth }));
     this.hills = planetCfg.hills.map((h) => ({ dir: dirFromLatLon(h.lat, h.lon), r: h.r * DEG, amp: h.amp }));
     this.flats = places.map((p) => ({ dir: dirFromLatLon(p.lat, p.lon), r: p.flat.r / this.R, h: p.flat.h }));
+    this.ledges = []; // mỏm đá do landmark thêm vào: { dir, r (rad), h }
     // ruộng lúa: vùng phẳng của landmark "rice"
     this.paddies = places
       .filter((p) => p.landmark === 'rice')
@@ -106,10 +109,27 @@ export class Terrain {
         h += m.amp * b * b * (0.78 + 0.32 * n2 + 0.2 * n);
       }
     }
+    // gồ ghề + bậc thềm tự nhiên trên đồi: tạo mặt bằng và vách dốc xen kẽ
+    if (h > 0.15) {
+      const bump = this.fbm(d.x * 5.3 + 3.1, d.y * 5.3, d.z * 5.3, 3);
+      h += bump * 0.42 * smoothstep(0.15, 0.9, h);
+      if (h > 0.55) {
+        const st = 0.62;
+        const t = (h - 0.25) / st;
+        const f = t - Math.floor(t);
+        const stepped = 0.25 + (Math.floor(t) + smoothstep(0.3, 0.7, f)) * st;
+        h += (stepped - h) * 0.6 * smoothstep(0.55, 1.0, h);
+      }
+    }
     for (const f of this.flats) {
       const a = angleBetween(d, f.dir);
       const w = 1 - smoothstep(0.6, 1.0, a / f.r);
       if (w > 0) h += (f.h - h) * w;
+    }
+    for (const l of this.ledges) {
+      const a = angleBetween(d, l.dir);
+      const w = 1 - smoothstep(0.55, 1.0, a / l.r);
+      if (w > 0 && l.h > h) h += (l.h + 0.06 * n2 - h) * w;
     }
     return h;
   }
@@ -144,7 +164,17 @@ export class Terrain {
     return null;
   }
 
+  ledgeWeight(d) {
+    let m = 0;
+    for (const l of this.ledges) m = Math.max(m, 1 - smoothstep(0.5, 0.95, angleBetween(d, l.dir) / l.r));
+    return m;
+  }
+
   colorAt(d, h, out) {
+    if (this.ledges.length && h > -0.3) {
+      const lw = this.ledgeWeight(d);
+      if (lw > 0.35) return out.copy(PAL.basalt).lerp(PAL.basaltHi, (Math.sin(d.x * 900) * Math.sin(d.z * 700) + 1) * 0.3);
+    }
     const n = this.fbm(d.x * 6 + 3, d.y * 6, d.z * 6, 2);
     if (h < -0.02) {
       const t = Math.min(1, -h / 1.4);
@@ -175,7 +205,7 @@ export class Terrain {
     return this.fbm(d.x * 2.6 + 11, d.y * 2.6, d.z * 2.6, 3);
   }
 
-  buildMesh(detail = 96) {
+  buildMesh(detail = 96, uniforms = { uTime: { value: 0 } }) {
     let geo = new THREE.IcosahedronGeometry(1, detail);
     geo.deleteAttribute('normal');
     geo.deleteAttribute('uv');
@@ -193,10 +223,74 @@ export class Terrain {
       col[i * 3 + 1] = c.g;
       col[i * 3 + 2] = c.b;
     }
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.computeVertexNormals();
+    // vách dốc → đá màu be, có mảng rêu xanh loang lổ
+    const nor = geo.attributes.normal;
+    const nn = new THREE.Vector3();
+    const beA = new THREE.Color(0xdccda7);
+    const beB = new THREE.Color(0xcbbb95);
+    for (let i = 0; i < pos.count; i++) {
+      d.fromBufferAttribute(pos, i);
+      const r = d.length();
+      d.divideScalar(r);
+      const h = r - this.R;
+      if (h < 0.18) continue;
+      nn.fromBufferAttribute(nor, i);
+      const slope = 1 - nn.dot(d);
+      const t = smoothstep(0.1, 0.22, slope);
+      if (t <= 0 || this.paddyAt(d)) continue;
+      const moss = this.fbm(d.x * 16 + 5, d.y * 16, d.z * 16, 2);
+      if (moss > 0.12) continue;
+      c.setRGB(col[i * 3], col[i * 3 + 1], col[i * 3 + 2]);
+      c.lerp(moss > -0.1 ? beB : beA, t);
+      col[i * 3] = c.r;
+      col[i * 3 + 1] = c.g;
+      col[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.computeBoundingSphere();
     const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() });
+    const R = this.R;
+    // mảng màu loang kiểu tranh vẽ + bọt sóng vỗ bờ
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = uniforms.uTime;
+      shader.uniforms.uR = { value: R };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vTP;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvTP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          /* glsl */ `#include <common>
+          uniform float uTime; uniform float uR; varying vec3 vTP;
+          float thash(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+          float tnoise(vec3 p) {
+            vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+            return mix(mix(mix(thash(i), thash(i + vec3(1,0,0)), f.x), mix(thash(i + vec3(0,1,0)), thash(i + vec3(1,1,0)), f.x), f.y),
+                       mix(mix(thash(i + vec3(0,0,1)), thash(i + vec3(1,0,1)), f.x), mix(thash(i + vec3(0,1,1)), thash(i + vec3(1,1,1)), f.x), f.y), f.z);
+          }`,
+        )
+        .replace(
+          '#include <color_fragment>',
+          /* glsl */ `#include <color_fragment>
+          {
+            float h = length(vTP) - uR;
+            float n1 = tnoise(vTP * 1.1);
+            float n2 = tnoise(vTP * 3.7 + 11.0);
+            // mảng đậm nhạt (quét cọ) trên cỏ
+            float blotch = smoothstep(0.55, 0.58, n1 * 0.65 + n2 * 0.45);
+            float land = step(0.15, h);
+            diffuseColor.rgb *= 1.0 - blotch * 0.07 * land;
+            float fleck = smoothstep(0.82, 0.84, tnoise(vTP * 9.0));
+            diffuseColor.rgb += fleck * 0.05 * land;
+            // bọt sóng: dải trắng chạy ra vào ở mép nước
+            float wave = sin(uTime * 1.3 + n1 * 9.0) * 0.045;
+            float foam = smoothstep(-0.16 + wave, -0.08 + wave, h) * (1.0 - smoothstep(0.0 + wave, 0.06 + wave, h));
+            foam *= smoothstep(0.35, 0.5, n2 + 0.25);
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.97, 0.99, 0.95), foam * 0.85);
+          }`,
+        );
+    };
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.castShadow = true;

@@ -190,34 +190,51 @@ function boathouse(v = 0) {
   return mesh(b, 0.025);
 }
 
-function redBridge(length, rise, R) {
+// Cầu vòm đỏ kiểu Yajima–Kyōjima: bắc theo trục X, bậc thang răng cưa, dầm vòm bên dưới,
+// lan can 3 thanh. y(x) đã trừ độ cong hành tinh để 2 đầu chạm đúng mặt đất.
+export function bridgeY(x, span, rise, base, R) {
+  const t = x / span + 0.5;
+  return base + Math.sin(Math.PI * t) * rise - (x * x) / (2 * R);
+}
+function redBridge(span, rise, base, R) {
   const b = new GeoBuilder();
-  const n = 14;
+  const RED = 0xd9482c;
+  const RED_D = 0xb53a24;
+  const W = 0.82;
+  const n = 22;
+  const y = (x) => bridgeY(x, span, rise, base, R);
   for (let i = 0; i < n; i++) {
-    const t0 = i / n;
-    const t1 = (i + 1) / n;
-    const y = (t) => Math.sin(Math.PI * t) * rise - ((t * length) ** 2) / (2 * R);
-    const z0 = t0 * length;
-    const z1 = t1 * length;
-    const y0 = y(t0);
-    const y1 = y(t1);
-    const seg = Math.hypot(z1 - z0, y1 - y0);
-    const pitch = -Math.atan2(y1 - y0, z1 - z0);
-    const cz = (z0 + z1) / 2;
-    const cy = (y0 + y1) / 2;
-    b.add(box(0.9, 0.08, seg + 0.02), 0xc9483a, { pos: [0, cy, cz], rot: [pitch, 0, 0] });
-    b.add(box(0.05, 0.05, seg + 0.02), 0xd65445, { pos: [0.43, cy + 0.42, cz], rot: [pitch, 0, 0] });
-    b.add(box(0.05, 0.05, seg + 0.02), 0xd65445, { pos: [-0.43, cy + 0.42, cz], rot: [pitch, 0, 0] });
-    if (i % 2 === 0) {
-      b.add(box(0.05, 0.42, 0.05), 0xc9483a, { pos: [0.43, cy + 0.21, cz] });
-      b.add(box(0.05, 0.42, 0.05), 0xc9483a, { pos: [-0.43, cy + 0.21, cz] });
+    const x0 = -span / 2 + (i / n) * span;
+    const x1 = -span / 2 + ((i + 1) / n) * span;
+    const xm = (x0 + x1) / 2;
+    const ym = y(xm);
+    // bậc thang (mặt phẳng) + má bậc
+    b.add(box(x1 - x0 + 0.01, 0.07, W), RED, { pos: [xm, ym, 0] });
+    b.add(box(0.03, 0.16, W), RED_D, { pos: [x0, ym - 0.07, 0] });
+    // dầm vòm hai bên (nghiêng theo độ dốc)
+    const ya = y(x0) - 0.16;
+    const yb = y(x1) - 0.16;
+    const pitch = Math.atan2(yb - ya, x1 - x0);
+    for (const z of [W / 2 - 0.04, -W / 2 + 0.04]) {
+      b.add(box(Math.hypot(x1 - x0, yb - ya) + 0.02, 0.2, 0.08), RED_D, { pos: [xm, (ya + yb) / 2, z], rot: [0, 0, pitch] });
     }
-    if (i > 0 && i < n - 1 && i % 3 === 0) {
-      b.add(cyl(0.05, 0.05, 1.6, 6), 0x9a3d33, { pos: [0.3, cy - 0.8, cz] });
-      b.add(cyl(0.05, 0.05, 1.6, 6), 0x9a3d33, { pos: [-0.3, cy - 0.8, cz] });
+    // lan can
+    const ra = y(x0);
+    const rb = y(x1);
+    const rp = Math.atan2(rb - ra, x1 - x0);
+    const len = Math.hypot(x1 - x0, rb - ra) + 0.02;
+    for (const z of [W / 2, -W / 2]) {
+      for (const hh of [0.2, 0.4, 0.6]) b.add(box(len, 0.045, 0.045), RED, { pos: [xm, (ra + rb) / 2 + hh, z], rot: [0, 0, rp] });
+      if (i % 3 === 0) b.add(box(0.06, 0.62, 0.06), RED, { pos: [x0, ra + 0.31, z] });
     }
   }
-  return mesh(b, 0.02);
+  for (const z of [W / 2, -W / 2]) b.add(box(0.06, 0.62, 0.06), RED, { pos: [span / 2, y(span / 2) + 0.31, z] });
+  // trụ bê tông ở 2 đầu
+  for (const s of [-1, 1]) {
+    b.add(box(0.9, 1.3, 1.05), 0x8f928d, { pos: [s * (span / 2 - 0.2), y(s * span / 2) - 0.78, 0] });
+    b.add(box(0.96, 0.08, 1.1), 0x9fa29c, { pos: [s * (span / 2 - 0.2), y(s * span / 2) - 0.12, 0] });
+  }
+  return mesh(b, 0.018);
 }
 
 function torii() {
@@ -326,6 +343,16 @@ const BUILDERS = {
       f.put(mesh(b, 0.028), 0, 0, { y: -0.05 });
       for (let x = -w / 2 + 0.6; x < w / 2; x += 1.2) f.collide(x, z, 0.85);
     }
+    // cầu thang bê tông chạy dọc bên hông các tầng
+    const st = new GeoBuilder();
+    for (let k = 0; k < 13; k++) {
+      const z = -1.7 - k * 0.37;
+      const yy = k * 0.33;
+      st.add(box(0.9, yy + 0.33, 0.37), k % 2 ? 0xbdb6a3 : 0xb3ac99, { pos: [4.75, (yy + 0.33) / 2, z] });
+    }
+    for (let k = 0; k < 13; k += 3) st.add(box(0.05, 0.6, 0.05), 0x8a8f8a, { pos: [5.2, k * 0.33 + 0.63, -1.7 - k * 0.37] });
+    st.add(box(0.04, 0.04, 4.9), 0x8a8f8a, { pos: [5.2, 2.6, -3.9], rot: [0.73, 0, 0] });
+    f.put(mesh(st, 0.02), 0, 0, { y: -0.05 });
     // cột trơ trọi trên tầng cao nhất
     const top = new GeoBuilder();
     for (let k = 0; k < 6; k++) {
@@ -374,15 +401,15 @@ const BUILDERS = {
 
   taraibune(f, world) {
     const r = rand(3);
-    for (const [x, z, v] of [[-3.6, 1.6, 0], [3.4, 1.5, 1], [5.2, 1.2, 0]]) {
+    for (const [x, z, v] of [[-5.8, 1.0, 0], [5.6, 0.9, 1], [7.4, 0.4, 0]]) {
       f.put(boathouse(v), x, z, { water: true, rotY: Math.PI });
       f.collide(x, z, 0.9);
     }
     const tubs = [
-      [-0.4, 4.2, true],
-      [2.4, 5.8, true],
-      [-2.6, 6.6, true],
-      [1.2, 2.9, false],
+      [0.2, 6.4, true],
+      [2.6, 7.6, true],
+      [-2.2, 8.2, true],
+      [-1.0, 5.6, false],
     ];
     for (const [x, z, rower] of tubs) {
       const tub = tubBoat(rower);
@@ -395,23 +422,40 @@ const BUILDERS = {
         tub.rotateOnAxis(new THREE.Vector3(0, 1, 0), 0.0015);
       });
     }
-    // cầu đỏ ra đảo nhỏ
-    const L = 4.6;
-    const start = new THREE.Group();
-    start.add(redBridge(L, 0.9, f.R));
-    f.put(start, -5.4, 1.8, { water: true, rotY: -0.3, y: 0.1 });
+    // cầu đỏ bắc ngang giữa 2 mỏm đá, mặt nhìn thẳng ra biển (đi lên được)
+    const B = TARAI_BRIDGE;
+    const bridge = redBridge(B.span, B.rise, B.base, f.R);
+    f.put(bridge, 0, B.z, { water: true });
+    world.walkMeshes.push(bridge);
+    world.decks.push({
+      center: f.dirAt(0, B.z),
+      axis: f.frame.side.clone(),
+      across: f.frame.fwd.clone(),
+      half: B.span / 2 + 0.25,
+      width: 0.34,
+      height: (x) => bridgeY(Math.max(-B.span / 2, Math.min(B.span / 2, x)), B.span, B.rise, B.base, 1e9) + 0.04,
+    });
+    // đá bazan đen rải quanh chân mỏm
+    for (let i = 0; i < 12; i++) {
+      const rk = inked(Models.rock(), toon(0xffffff, { vertexColors: true, color: 0x6a625a }), { outline: 0.025 });
+      rk.scale.set(0.6 + r() * 0.9, 0.5 + r() * 0.6, 0.6 + r() * 0.8);
+      const sx = r() < 0.5 ? -1 : 1;
+      f.put(rk, sx * (3.4 + r() * 1.8), 2.4 + r() * 3.4, { water: true, y: -0.15, rotY: r() * 6 });
+    }
     const islet = rockIsland(1.8, 1.3, 1.6, 4, { grassAbove: 0.2 });
-    f.put(islet, -7.0, 6.1, { water: true, y: -0.35 });
-    f.collide(-7.0, 6.1, 1.8);
+    f.put(islet, -7.4, 7.0, { water: true, y: -0.35 });
+    f.collide(-7.4, 7.0, 1.8);
     const pine = inked(Models.pine(), vcToon(), { outline: 0.03 });
-    f.put(pine, -6.8, 6.2, { water: true, y: 0.6 });
+    f.put(pine, -7.2, 7.1, { water: true, y: 0.6 });
     const pine2 = inked(Models.pine(), vcToon(), { outline: 0.03 });
     pine2.scale.setScalar(0.8);
-    f.put(pine2, -7.6, 5.6, { water: true, y: 0.3 });
-    for (let i = 0; i < 6; i++) {
-      const rk = inked(Models.rock(), vcToon(), { outline: 0.025 });
-      rk.scale.setScalar(0.6 + r() * 0.8);
-      f.put(rk, (r() < 0.5 ? -1 : 1) * (2 + r() * 5), 2.4 + r() * 1.2, { water: true, y: -0.1, rotY: r() * 6 });
+    f.put(pine2, -8.0, 6.5, { water: true, y: 0.3 });
+    // thông mọc trên 2 mỏm đá
+    for (const [x, z, sc] of [[-3.8, 2.3, 0.85], [3.7, 2.1, 0.95]]) {
+      const p = inked(Models.matsu(), vcToon(), { outline: 0.03 });
+      p.scale.setScalar(sc);
+      f.put(p, x, z);
+      f.collide(x, z, 0.3);
     }
   },
 
@@ -499,13 +543,24 @@ const BUILDERS = {
   },
 };
 
+// Cầu Taraibune: nhịp, độ vồng, độ cao 2 đầu, vị trí z (cục bộ)
+export const TARAI_BRIDGE = { span: 5.6, rise: 1.25, base: 0.78, z: 4.0 };
+
+// Mỏm đá (địa hình) mà landmark cần: [x, z, bán kính, độ cao]
+export const LEDGES = {
+  taraibune: [
+    ...[1.6, 2.4, 3.2, 4.0, 4.6].map((z) => [-3.3, z, 1.05, TARAI_BRIDGE.base]),
+    ...[1.6, 2.4, 3.2, 4.0, 4.6].map((z) => [3.3, z, 1.05, TARAI_BRIDGE.base]),
+  ],
+};
+
 // Góc đứng xem (at) + điểm nhìn (focus) + bán kính vùng click, theo toạ độ cục bộ.
 export const VIEWS = {
   default: { at: [0, -3.5], focus: [0, 2.5], pick: 3 },
   rice: { at: [-1.0, -3.4], focus: [0.3, 1.6], pick: 2.6 },
   ruins: { at: [1.8, 4.6], focus: [0, -3.2], pick: 4.5 },
   shelter: { at: [0, -2.6], focus: [0, 1.3], pick: 2.2 },
-  taraibune: { at: [0.4, -0.6], focus: [-0.4, 4.4], pick: 3.6 },
+  taraibune: { at: [0.3, -0.4], focus: [0, 4.0], pick: 2.4 },
   futatsugame: { at: [0.2, 0.2], focus: [-0.4, 7.6], pick: 3.8 },
   onogame: { at: [0, -3.0], focus: [0.4, 6.0], pick: 4.5 },
 };

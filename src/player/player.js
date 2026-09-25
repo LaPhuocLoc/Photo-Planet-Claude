@@ -29,7 +29,7 @@ export class Player {
     this.dir.copy(dir).normalize();
     const f = facing ?? tangentFrame(this.dir).north;
     this.facing.copy(f).addScaledVector(this.dir, -f.dot(this.dir)).normalize();
-    this.height = this.terrain.height(this.dir);
+    this.height = this.world.heightAt(this.dir);
     this.target = null;
     this.sync(0);
   }
@@ -79,7 +79,7 @@ export class Player {
 
   tryMove(wdir, len) {
     const next = _v.copy(this.dir).multiplyScalar(this.R).addScaledVector(wdir, len).normalize();
-    if (!this.terrain.walkable(next)) return false;
+    if (!this.world.walkable(next)) return false;
     // va chạm: đẩy ra khỏi các vật cản
     const pr = 0.28;
     for (const c of this.world.colliders) {
@@ -92,7 +92,7 @@ export class Player {
         if (away.lengthSq() < 1e-10) return false;
         away.normalize();
         next.multiplyScalar(this.R).addScaledVector(away, min - dist + 0.001).normalize();
-        if (!this.terrain.walkable(next)) return false;
+        if (!this.world.walkable(next)) return false;
       }
     }
     const old = this.dir.clone();
@@ -111,7 +111,7 @@ export class Player {
   }
 
   sync(dt, t = 0) {
-    const h = this.terrain.height(this.dir);
+    const h = this.world.heightAt(this.dir);
     this.height = dt ? this.height + (h - this.height) * Math.min(1, dt * 14) : h;
     this.position.copy(this.dir).multiplyScalar(this.R + this.height);
     this.object.position.copy(this.position);

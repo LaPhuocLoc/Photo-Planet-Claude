@@ -104,7 +104,10 @@ export const TRIPS = [
         flat: { r: 3.2, h: 0.24 },
         blurb:
           'Thuyền thúng gỗ truyền thống của Sado, lướt trên làn nước trong đến mức nhìn thấy cả đáy. Nhà thuyền dựng sát mép nước.',
-        photos: [{ id: 'DSC01339', caption: 'Thuyền thúng trên mặt nước ngọc bích' }],
+        photos: [
+          { id: 'DSC01339', caption: 'Thuyền thúng trên mặt nước ngọc bích' },
+          { id: 'yajima-bridge', caption: 'Cây cầu đỏ vồng cao, nhìn thẳng ra biển' },
+        ],
       },
       {
         id: 'futatsugame',
