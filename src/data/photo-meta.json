@@ -1,0 +1,101 @@
+{
+  "DSC00567": {
+    "w": 2048,
+    "h": 1365,
+    "camera": "ILCE-7M5",
+    "lens": "20-200mm F3.5-6.3 DG | Contemporary 025",
+    "f": 6.3,
+    "shutter": "1/1000s",
+    "iso": 100,
+    "focal": 200,
+    "date": "2026-09-19T00:43:18.000Z"
+  },
+  "DSC00689": {
+    "w": 2048,
+    "h": 1365,
+    "camera": "ILCE-7M5",
+    "lens": "20-200mm F3.5-6.3 DG | Contemporary 025",
+    "f": 6.3,
+    "shutter": "1/400s",
+    "iso": 100,
+    "focal": 80,
+    "date": "2026-09-19T01:40:02.000Z"
+  },
+  "DSC00724": {
+    "w": 1365,
+    "h": 2048,
+    "camera": "ILCE-7M5",
+    "lens": "20-200mm F3.5-6.3 DG | Contemporary 025",
+    "f": 6.3,
+    "shutter": "1/320s",
+    "iso": 100,
+    "focal": 57,
+    "date": "2026-09-19T01:46:19.000Z"
+  },
+  "DSC01125": {
+    "w": 2048,
+    "h": 1365,
+    "camera": "ILCE-7M5",
+    "lens": "20-200mm F3.5-6.3 DG | Contemporary 025",
+    "f": 8,
+    "shutter": "1/640s",
+    "iso": 100,
+    "focal": 84,
+    "date": "2026-09-19T21:43:12.000Z"
+  },
+  "DSC01339": {
+    "w": 2048,
+    "h": 1365,
+    "camera": "ILCE-7M5",
+    "lens": "20-200mm F3.5-6.3 DG | Contemporary 025",
+    "f": 9,
+    "shutter": "1/125s",
+    "iso": 100,
+    "focal": 20,
+    "date": "2026-09-19T23:08:02.000Z"
+  },
+  "DSC01555": {
+    "w": 2048,
+    "h": 1365,
+    "camera": "ILCE-7M5",
+    "lens": "20-200mm F3.5-6.3 DG | Contemporary 025",
+    "f": 6.3,
+    "shutter": "1/640s",
+    "iso": 100,
+    "focal": 200,
+    "date": "2026-09-20T00:42:50.000Z"
+  },
+  "DSC01621": {
+    "w": 2048,
+    "h": 1365,
+    "camera": "ILCE-7M5",
+    "lens": "20-200mm F3.5-6.3 DG | Contemporary 025",
+    "f": 9,
+    "shutter": "1/500s",
+    "iso": 100,
+    "focal": 116,
+    "date": "2026-09-20T02:37:07.000Z"
+  },
+  "DSC01663": {
+    "w": 2048,
+    "h": 1365,
+    "camera": "ILCE-7M5",
+    "lens": "20-200mm F3.5-6.3 DG | Contemporary 025",
+    "f": 9,
+    "shutter": "1/320s",
+    "iso": 100,
+    "focal": 21,
+    "date": "2026-09-20T04:02:21.000Z"
+  },
+  "DSC01769": {
+    "w": 2048,
+    "h": 1365,
+    "camera": "ILCE-7M5",
+    "lens": "20-200mm F3.5-6.3 DG | Contemporary 025",
+    "f": 3.5,
+    "shutter": "1/800s",
+    "iso": 100,
+    "focal": 20,
+    "date": "2026-09-20T04:44:17.000Z"
+  }
+}
