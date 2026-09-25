@@ -71,3 +71,12 @@ scripts/build-photos.mjs  tối ưu ảnh + đọc EXIF
 ## Deploy
 
 `npm run build` rồi đẩy thư mục `dist/` lên GitHub Pages / Netlify / Vercel / Cloudflare Pages. Build dùng đường dẫn tương đối nên chạy được cả trong thư mục con.
+
+## Agent Claude Code
+
+Repo có 2 agent (trong `.claude/agents/`) dùng chung sổ tay kinh nghiệm `docs/island-playbook.md`:
+
+- **island-creator**: tạo hành tinh mới từ bộ ảnh một chuyến đi. Ví dụ: *"dùng island-creator tạo đảo Kyoto, ảnh ở images/kyoto/"*
+- **island-editor**: sửa một đảo có sẵn (ảnh, chữ, model, cảnh vật, UX, bug). Ví dụ: *"dùng island-editor: đảo Sado, thêm ảnh X vào Futatsugame, làm hòn rùa to hơn"*
+
+Script kiểm tra bằng screenshot: `scripts/verify/tour.mjs` (hướng dẫn ở đầu file).
