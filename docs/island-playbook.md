@@ -119,6 +119,7 @@ src/ui/ui.js + style.css   HUD, album (EXIF, srcset, preload), nhật ký, pin, 
 |---|---|---|
 | Ảnh album mờ dù đã tải xong | thumbnail có `filter` + `transform` → stacking context, vẽ **đè** lên ảnh nét dù DOM đứng trước | ảnh nét `position:relative; z-index:1`; ẩn thumbnail khi ảnh nét hiện xong. Kiểm bằng `elementFromPoint` + crop ảnh, không chỉ đọc class |
 | Mobile chạm đi lại mở album | picker sphere tàng hình to (2–4.5) | cảm ứng: KHÔNG click-to-move/picker; di chuyển bằng joystick nổi (đặt ngón bất kỳ đâu), ngón 2 xoay, chụm zoom; xem ảnh bằng nút dock dưới màn hình |
+| Offline: HTML ra nhưng JS/CSS lỗi dù đã cache | host gửi `Vary: Origin`, request module script có header Origin → `cache.match` không khớp | mọi `match` trong sw.js dùng `{ ignoreVary: true }`; test offline thật (context.setOffline) sau khi sửa SW |
 | Load chậm ~10s trên máy yếu | chờ rAF giữa các bước dựng + lớp phủ `mix-blend-mode`/`backdrop-filter` | xem §8b |
 | Shader không compile | đặt tên biến `patch` (từ khoá GLSL) | tránh từ khoá: patch, sample, input, output, filter, active… Luôn đọc console sau khi sửa shader |
 | Mặt nhân vật lỗ chỗ khi zoom gần | occlusion dither ăn cả nhân vật | vật liệu nhân vật không `withOcclusion` |
