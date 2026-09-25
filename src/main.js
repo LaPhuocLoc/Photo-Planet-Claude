@@ -387,6 +387,7 @@ function tick() {
   }
   if (near !== nearPlace) {
     nearPlace = near;
+    if (near) ui.preloadPlace(near.id);
     ui.setPlaceTitle(started ? near : null);
   }
   if (nearPlace && started && !ui.gallery.open) {

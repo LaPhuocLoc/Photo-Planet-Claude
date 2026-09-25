@@ -73,6 +73,18 @@ export function toonGradient() {
   return gradient;
 }
 
+// 2 tông (sáng / bóng) cho nhân vật — cảm giác cel-shading vẽ tay hơn
+let gradient2;
+export function toonGradient2() {
+  if (gradient2) return gradient2;
+  const data = new Uint8Array([150, 255]);
+  gradient2 = new THREE.DataTexture(data, data.length, 1, THREE.RedFormat);
+  gradient2.minFilter = gradient2.magFilter = THREE.NearestFilter;
+  gradient2.generateMipmaps = false;
+  gradient2.needsUpdate = true;
+  return gradient2;
+}
+
 const cache = new Map();
 export function toon(color = 0xffffff, opts = {}) {
   const key = `${color}|${JSON.stringify(opts)}`;
@@ -85,11 +97,16 @@ export const vcToon = () => toon(0xffffff, { vertexColors: true });
 
 // ── Viền mực ───────────────────────────────────────────────
 const outlineCache = new Map();
-export function outlineMaterial(thickness = 0.035, color = INK) {
-  const key = `${thickness}|${color}`;
+export function outlineMaterial(thickness = 0.035, color = INK, { occlude = true } = {}) {
+  const key = `${thickness}|${color}|${occlude}`;
   if (outlineCache.has(key)) return outlineCache.get(key);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uThickness: { value: thickness }, uColor: { value: new THREE.Color(color) }, ...occlusion },
+    uniforms: {
+      uThickness: { value: thickness },
+      uColor: { value: new THREE.Color(color) },
+      ...occlusion,
+      ...(occlude ? {} : { uOcclude: { value: 0 } }),
+    },
     vertexShader: /* glsl */ `
       attribute vec3 outlineNormal;
       uniform float uThickness;

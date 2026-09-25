@@ -29,7 +29,7 @@ Link thẳng tới một địa điểm: `…/#futatsugame` (id lấy trong `src
 ## Thêm ảnh / địa điểm
 
 1. Bỏ ảnh gốc (JPG) vào `images/`.
-2. `npm run photos` → sinh bản webp tối ưu vào `public/photos/` và đọc EXIF (máy, ống kính, khẩu, tốc, ISO, ngày chụp) vào `src/data/photo-meta.json`.
+2. `npm run photos` → sinh bản webp tối ưu (2000px, 1200px, thumbnail) vào `public/photos/` và đọc EXIF (máy, ống kính, khẩu, tốc, ISO, ngày chụp) vào `src/data/photo-meta.json`.
 3. Khai báo trong `src/data/trips.js`:
 
 ```js
@@ -61,7 +61,7 @@ src/
   world/world.js        đường làng, cột điện, cây cỏ, mây, mòng biển, phà
   world/sky.js          bầu trời vệt cọ, nước biển, bụi lơ lửng
   world/toon.js         vật liệu toon, viền mực, hiệu ứng nhìn xuyên vật cản
-  player/               nhân vật + di chuyển trên mặt cầu
+  player/               nhân vật (texture vẽ tay bằng canvas trong paint.js) + di chuyển trên mặt cầu
   core/rig.js           camera đi dạo ⇄ toàn cảnh hành tinh
   core/audio.js         âm thanh nền tự sinh (sóng biển, chuông gió)
   ui/ui.js              HUD, album ảnh, nhật ký

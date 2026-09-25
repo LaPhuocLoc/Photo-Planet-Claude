@@ -3,7 +3,29 @@ import META from '../data/photo-meta.json';
 
 const $ = (id) => document.getElementById(id);
 const photoUrl = (id) => `photos/${id}.webp`;
+const midUrl = (id) => `photos/${id}-1200.webp`;
 const thumbUrl = (id) => `photos/${id}-thumb.webp`;
+const SRCSET = (id) => `${midUrl(id)} 1200w, ${photoUrl(id)} 2000w`;
+const SIZES = '(max-width: 860px) 100vw, 75vw';
+
+// Tải + giải mã ảnh trước; trả về Promise<url thực sự đã chọn>. Có cache để không tải lại.
+const photoCache = new Map();
+export function preloadPhoto(id) {
+  if (photoCache.has(id)) return photoCache.get(id);
+  const img = new Image();
+  img.decoding = 'async';
+  img.sizes = SIZES;
+  img.srcset = SRCSET(id);
+  img.src = photoUrl(id);
+  const p = (img.decode ? img.decode() : new Promise((res, rej) => ((img.onload = res), (img.onerror = rej))))
+    .then(() => img.currentSrc || img.src)
+    .catch(() => {
+      photoCache.delete(id); // lỗi mạng: lần sau thử lại
+      return photoUrl(id);
+    });
+  photoCache.set(id, p);
+  return p;
+}
 
 const CAMERA_NAMES = { 'ILCE-7M5': 'Sony α7 V', 'ILCE-7M4': 'Sony α7 IV', 'ILCE-7CM2': 'Sony α7C II' };
 const lensName = (l) => (l ? l.replace(/\s*\d{3}$/, '').replace('Contemporary', 'C') : null);
@@ -271,21 +293,38 @@ export class UI {
     const meta = META[ph.id] || {};
     const full = $('g-full');
     const thumb = $('g-thumb');
+    const frame = $('g-frame');
+    const token = (this.loadToken = (this.loadToken ?? 0) + 1);
+    const loading = preloadPhoto(ph.id);
     const load = () => {
+      if (token !== this.loadToken) return;
       full.classList.remove('ready');
+      full.removeAttribute('src');
       thumb.src = thumbUrl(ph.id);
-      full.onload = () => full.classList.add('ready');
-      full.src = photoUrl(ph.id);
-      full.alt = ph.caption || place.name;
       thumb.classList.remove('swap');
       full.classList.remove('swap');
-      if (full.complete && full.naturalWidth) full.classList.add('ready');
+      frame.classList.add('loading');
+      loading.then((url) => {
+        if (token !== this.loadToken) return; // người dùng đã chuyển ảnh khác
+        full.src = url;
+        full.alt = ph.caption || place.name;
+        const done = () => {
+          if (token !== this.loadToken) return;
+          full.classList.add('ready');
+          frame.classList.remove('loading');
+        };
+        if (full.complete && full.naturalWidth) done();
+        else {
+          full.onload = done;
+          full.onerror = done;
+        }
+      });
     };
     if (first) load();
     else {
       thumb.classList.add('swap');
       full.classList.add('swap');
-      setTimeout(load, 180);
+      setTimeout(load, 160);
     }
     this.ratio = meta.w && meta.h ? meta.w / meta.h : 1.5;
     this.fitPhoto();
@@ -303,7 +342,7 @@ export class UI {
     [...$('g-strip').children].forEach((b, i) => b.classList.toggle('on', i === k));
     $('g-prev').disabled = $('g-next').disabled = n < 2;
     // tải trước ảnh kế
-    if (n > 1) new Image().src = photoUrl(place.photos[(k + 1) % n].id);
+    if (n > 1) preloadPhoto(place.photos[(k + 1) % n].id);
   }
 
   // khung ảnh đúng tỉ lệ ảnh gốc, vừa khít vùng hiển thị
@@ -321,6 +360,12 @@ export class UI {
     const fr = $('g-frame');
     fr.style.width = `${Math.max(0, Math.floor(w))}px`;
     fr.style.height = `${Math.max(0, Math.floor(h))}px`;
+  }
+
+  // gọi khi người chơi tới gần 1 địa điểm: tải sẵn ảnh để bấm E là thấy nét ngay
+  preloadPlace(id) {
+    const p = this.places.find((q) => q.id === id);
+    p?.photos.forEach((ph, i) => setTimeout(() => preloadPhoto(ph.id), i * 150));
   }
 
   step(d) {

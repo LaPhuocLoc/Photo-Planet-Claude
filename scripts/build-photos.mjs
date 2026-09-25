@@ -8,7 +8,7 @@ import exifr from 'exifr';
 const SRC = 'images';
 const OUT = 'public/photos';
 const META = 'src/data/photo-meta.json';
-const SIZES = { full: 2000, thumb: 480 };
+const SIZES = { full: 2000, mid: 1200, thumb: 480 };
 
 const files = (await fs.readdir(SRC)).filter((f) => /\.(jpe?g)$/i.test(f));
 await fs.mkdir(OUT, { recursive: true });
@@ -22,6 +22,8 @@ for (const file of files) {
 
   await img.clone().resize({ width: SIZES.full, height: SIZES.full, fit: 'inside', withoutEnlargement: true })
     .webp({ quality: 84 }).toFile(path.join(OUT, `${id}.webp`));
+  await img.clone().resize({ width: SIZES.mid, height: SIZES.mid, fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 80 }).toFile(path.join(OUT, `${id}-1200.webp`));
   await img.clone().resize({ width: SIZES.thumb, height: SIZES.thumb, fit: 'inside' })
     .webp({ quality: 72 }).toFile(path.join(OUT, `${id}-thumb.webp`));
 
