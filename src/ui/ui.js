@@ -1,5 +1,7 @@
 // Giao diện DOM: intro, HUD, album ảnh, nhật ký, pin bản đồ, toast.
 import { TRIP_LIST, tripUrl } from '../trips/index.js';
+import { cameraName, lensName, fmtDate } from './format.js';
+import { PhotoViewer } from './viewer.js';
 
 const $ = (id) => document.getElementById(id);
 // thư mục ảnh + EXIF của đảo đang mở (gán trong UI.setTrip)
@@ -30,12 +32,8 @@ export function preloadPhoto(id) {
   return p;
 }
 
-const CAMERA_NAMES = { 'ILCE-7M5': 'Sony α7 V', 'ILCE-7M4': 'Sony α7 IV', 'ILCE-7CM2': 'Sony α7C II' };
-const lensName = (l) => (l ? l.replace(/\s*\d{3}$/, '').replace('Contemporary', 'C') : null);
-const fmtDate = (iso) =>
-  iso
-    ? new Date(iso).toLocaleDateString('vi-VN', { timeZone: 'Asia/Tokyo', day: '2-digit', month: '2-digit', year: 'numeric' })
-    : null;
+// điện thoại / máy tính bảng → xem ảnh toàn màn hình kiểu app "Ảnh"; máy tính → album dạng thẻ
+const MOBILE_VIEWER = '(hover: none) and (pointer: coarse), (max-width: 700px)';
 
 export class UI {
   // entry: mục nhẹ trong TRIP_LIST (hiện intro ngay khi gói JS chính vừa tải xong,
@@ -48,6 +46,7 @@ export class UI {
     this.gallery = { open: false, place: null, index: 0 };
     this.pinEls = new Map();
     this.currentTitle = null;
+    this.viewer = null;
     this.fillTripText(entry);
     document.body.classList.add('intro-on');
     this.bind();
@@ -129,7 +128,7 @@ export class UI {
       if (Math.abs(dx) > 50) this.step(dx < 0 ? 1 : -1);
       sx = null;
     });
-    window.addEventListener('resize', () => this.gallery.open && this.fitPhoto());
+    window.addEventListener('resize', () => this.gallery.open && !this.gallery.mobile && this.fitPhoto());
     window.addEventListener('keydown', (e) => {
       if (!this.gallery.open) return;
       if (e.key === 'ArrowRight') this.step(1);
@@ -300,23 +299,39 @@ export class UI {
     const place = this.places.find((p) => p.id === placeId);
     if (!place) return;
     const i = this.places.indexOf(place);
-    this.gallery = { open: true, place, index };
-    $('gallery').hidden = false;
-    $('g-chapter').textContent = `Chặng ${i + 1} / ${this.places.length}`;
-    $('g-title').textContent = place.name;
-    $('g-jp').textContent = place.nameJp;
-    $('g-blurb').textContent = place.blurb;
-    const strip = $('g-strip');
-    strip.innerHTML = '';
-    strip.hidden = place.photos.length < 2;
-    place.photos.forEach((ph, k) => {
-      const b = document.createElement('button');
-      b.innerHTML = `<img src="${thumbUrl(ph.id)}" alt="" />`;
-      b.addEventListener('click', () => this.show(k));
-      strip.appendChild(b);
-    });
-    this.show(index, true);
+    const chapter = `Chặng ${i + 1} / ${this.places.length}`;
+    const mobile = matchMedia(MOBILE_VIEWER).matches;
+    this.gallery = { open: true, place, index, mobile };
     this.setPrompt(null);
+    if (mobile) {
+      this.viewer ??= new PhotoViewer({
+        thumbUrl,
+        photoUrl,
+        load: preloadPhoto,
+        meta: (id) => META[id] || {},
+        onIndex: (k) => (this.gallery.index = k),
+        onClose: () => this.closeGallery(),
+      });
+      this.viewer.open(place, index, chapter);
+      this.viewer.el.appendChild($('stamp'));
+    } else {
+      $('gallery').hidden = false;
+      $('g-chapter').textContent = chapter;
+      $('g-title').textContent = place.name;
+      $('g-jp').textContent = place.nameJp;
+      $('g-blurb').textContent = place.blurb;
+      const strip = $('g-strip');
+      strip.innerHTML = '';
+      strip.hidden = place.photos.length < 2;
+      place.photos.forEach((ph, k) => {
+        const b = document.createElement('button');
+        b.innerHTML = `<img src="${thumbUrl(ph.id)}" alt="" />`;
+        b.addEventListener('click', () => this.show(k));
+        strip.appendChild(b);
+      });
+      $('gallery').querySelector('.g-card').appendChild($('stamp'));
+      this.show(index, true);
+    }
 
     if (!this.discovered.has(place.id)) {
       this.discovered.add(place.id);
@@ -381,7 +396,7 @@ export class UI {
     this.fitPhoto();
     $('g-caption').textContent = ph.caption || '';
     const rows = [
-      ['Máy', CAMERA_NAMES[meta.camera] || meta.camera, true],
+      ['Máy', cameraName(meta.camera), true],
       ['Ống kính', lensName(meta.lens), true],
       ['Tiêu cự', meta.focal && `${meta.focal}mm`],
       ['Khẩu', meta.f && `ƒ/${meta.f}`],
@@ -421,13 +436,15 @@ export class UI {
 
   step(d) {
     if (!this.gallery.open) return;
-    this.show(this.gallery.index + d);
+    if (this.gallery.mobile) this.viewer.go(this.gallery.index + d);
+    else this.show(this.gallery.index + d);
   }
 
   closeGallery() {
     if (!this.gallery.open) return;
     this.gallery.open = false;
-    $('gallery').hidden = true;
+    if (this.gallery.mobile) this.viewer.close();
+    else $('gallery').hidden = true;
     this.h.onGalleryClose?.();
   }
 }

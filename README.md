@@ -23,6 +23,7 @@ npm run build      # xuất bản ra dist/ (static, host ở đâu cũng đượ
 | Thu phóng | cuộn chuột (thu hết cỡ → toàn cảnh hành tinh) | chụm 2 ngón |
 | Xem ảnh | tới gần địa điểm rồi bấm `E`, hoặc click thẳng vào landmark | chạm vào bong bóng "Xem ảnh" |
 | Toàn cảnh / nhật ký | `M` / `J` | nút bên phải |
+| Trong trình xem ảnh | `←` `→` đổi ảnh, `Esc` đóng | toàn màn hình kiểu app Ảnh: vuốt ngang đổi ảnh, vuốt lên xem chi tiết, vuốt xuống / Back để đóng, chụm hoặc chạm đúp để phóng to, chạm để ẩn thanh công cụ |
 
 Chọn đảo: `…/?trip=sado`. Link thẳng tới một địa điểm: `…/?trip=sado#futatsugame`.
 
