@@ -299,6 +299,7 @@ export class UI {
     const load = () => {
       if (token !== this.loadToken) return;
       full.classList.remove('ready');
+      frame.classList.remove('has-full');
       full.removeAttribute('src');
       thumb.src = thumbUrl(ph.id);
       thumb.classList.remove('swap');
@@ -312,6 +313,10 @@ export class UI {
           if (token !== this.loadToken) return;
           full.classList.add('ready');
           frame.classList.remove('loading');
+          // chỉ ẩn thumbnail khi ảnh nét đã hiện hẳn (hết transition), có dự phòng timeout
+          const hideThumb = () => token === this.loadToken && full.classList.contains('ready') && frame.classList.add('has-full');
+          full.addEventListener('transitionend', hideThumb, { once: true });
+          setTimeout(hideThumb, 900);
         };
         if (full.complete && full.naturalWidth) done();
         else {
