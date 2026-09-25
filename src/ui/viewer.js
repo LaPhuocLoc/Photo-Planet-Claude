@@ -328,7 +328,8 @@ export class PhotoViewer {
     if (!cur) return;
     const padB = parseFloat(getComputedStyle(this.sheetIn).paddingBottom) || 0;
     const contentH = 24 + this.body.offsetHeight + padB;
-    const topY = this.top.offsetHeight + 4; // mép dưới thanh trên cùng
+    // mở bảng thông tin thì thanh trên ẩn đi, ảnh được đẩy lên sát mép trên (chừa tai thỏ nếu có)
+    const topY = Math.max(0, (parseFloat(getComputedStyle(this.top).paddingTop) || 0) - 8);
     const minSheet = Math.min(contentH, vh * 0.36);
     const plan = (s) => {
       // ảnh ngang (thấp): dạt hẳn lên đỉnh, bảng lấp phần dưới

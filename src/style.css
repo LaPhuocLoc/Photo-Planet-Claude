@@ -1245,6 +1245,7 @@ body.intro-on .hint {
 .viewer.bare .v-bottom,
 .viewer.pulling .v-top,
 .viewer.pulling .v-bottom,
+.viewer.info-open .v-top,
 .viewer.info-open .v-bottom {
   opacity: 0;
   pointer-events: none;
